@@ -1,4 +1,5 @@
 import pandas as pd
+import tensorflow as tf
 
 def load_promoter_sequences(promoter_file):
     data = pd.read_csv(promoter_file, header=None)
@@ -21,9 +22,9 @@ def preprocess_promoter_sequences(promoter_sequences):
     return train_sequences, val_sequences
 
 def prepare_batch(train, val):
-    input_tensor = train.to_tensor()
-    output_tensor = train.to_tensor()
-    val_tensor = val.to_tensor()
+    input_tensor = tf.convert_to_tensor(train)
+    output_tensor = tf.convert_to_tensor(train)
+    val_tensor = tf.convert_to_tensor(val)
     return (input_tensor, output_tensor), val_tensor
 
 BUFFER_SIZE = 106
