@@ -19,3 +19,20 @@ def preprocess_promoter_sequences(promoter_sequences):
         train_sequences.append(seq[:-1])
         val_sequences.append(seq[1:])
     return train_sequences, val_sequences
+
+def prepare_batch(train, val):
+    input_tensor = train.to_tensor()
+    output_tensor = train.to_tensor()
+    val_tensor = val.to_tensor()
+    return (input_tensor, output_tensor), val_tensor
+
+BUFFER_SIZE = 106
+BATCH_SIZE = 53
+
+def make_batches(ds):
+    return (
+        ds
+        .shuffle(BUFFER_SIZE)
+        .batch(BATCH_SIZE)
+        .map(prepare_batch, tf.data.AUTOTUNE)
+        .prefetch(buffer_size=tf.data.AUTOTUNE))
