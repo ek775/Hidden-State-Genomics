@@ -32,11 +32,6 @@ transformer = Transformer(
     dropout_rate=dropout_rate
 )
 
-# test loaded correctly
-print(ds.take(1))
-transformer((train_tensor, val_tensor))
-print(transformer.summary())
-
 # initialize the optimizer
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
   def __init__(self, d_model, warmup_steps=4000):
@@ -85,3 +80,9 @@ def masked_accuracy(label, pred):
   match = tf.cast(match, dtype=tf.float32)
   mask = tf.cast(mask, dtype=tf.float32)
   return tf.reduce_sum(match)/tf.reduce_sum(mask)
+
+# compile the model
+transformer.compile(
+    loss=masked_loss,
+    optimizer=optimizer,
+    metrics=[masked_accuracy])
