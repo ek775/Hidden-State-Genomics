@@ -9,9 +9,12 @@ from model import Transformer
 # load and preprocess the data
 sequences = load_promoter_sequences('./data/promoters.data')
 train_sequences, val_sequences = preprocess_promoter_sequences(sequences)
+print(f"Train Sequences: {train_sequences[:5]} \n Val Sequences: {val_sequences[:5]}")
+print(f"Train Sequences Length: {len(train_sequences)} \n Val Sequences Length: {len(val_sequences)}")
 train_tensor = tf.convert_to_tensor(train_sequences)
 val_tensor = tf.convert_to_tensor(val_sequences)
 ds = tf.data.Dataset.from_tensor_slices([train_tensor, val_tensor])
+print(ds)
 
 # initialize the model
 num_layers = 8
@@ -86,3 +89,7 @@ transformer.compile(
     loss=masked_loss,
     optimizer=optimizer,
     metrics=[masked_accuracy])
+
+# train the model
+tb_callback = tf.keras.callbacks.TensorBoard(log_dir='./logs', histogram_freq=1)
+history = transformer.fit(ds, epochs=1000, callbacks=[tb_callback])
