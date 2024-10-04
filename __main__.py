@@ -2,18 +2,19 @@ import tensorflow as tf
 import keras
 import tensorboard as tb
 
-from preprocessing import load_promoter_sequences, preprocess_promoter_sequences, prepare_batch, make_batches
+from preprocessing import load_promoter_sequences, preprocess_promoter_sequences
 from model import Transformer
 
 
 # load and preprocess the data
 sequences = load_promoter_sequences('./data/promoters.data')
-train_sequences, val_sequences = preprocess_promoter_sequences(sequences)
-print(f"Train Sequences: {train_sequences[:5]} \n Val Sequences: {val_sequences[:5]}")
-print(f"Train Sequences Length: {len(train_sequences)} \n Val Sequences Length: {len(val_sequences)}")
-train_tensor = tf.convert_to_tensor(train_sequences)
-val_tensor = tf.convert_to_tensor(val_sequences)
-ds = tf.data.Dataset.from_tensor_slices([train_tensor, val_tensor])
+in_tensor, out_tensor, whole_tensor = preprocess_promoter_sequences(sequences)
+in_tensor = tf.pad(in_tensor, [[0, 0], [0, 1],[0,0]])
+out_tensor = tf.pad(out_tensor, [[0, 0], [0, 1],[0,0]])
+
+inputs = (whole_tensor, in_tensor)
+labels = out_tensor
+ds = tf.data.Dataset.from_tensor_slices((inputs, labels))
 print(ds)
 
 # initialize the model
@@ -93,3 +94,5 @@ transformer.compile(
 # train the model
 tb_callback = tf.keras.callbacks.TensorBoard(log_dir='./logs', histogram_freq=1)
 history = transformer.fit(ds, epochs=1000, callbacks=[tb_callback])
+
+tb.notebook
