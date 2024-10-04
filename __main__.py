@@ -86,13 +86,23 @@ def masked_accuracy(label, pred):
   return tf.reduce_sum(match)/tf.reduce_sum(mask)
 
 # compile the model
+print("=== COMPILING ===")
 transformer.compile(
     loss=masked_loss,
     optimizer=optimizer,
     metrics=[masked_accuracy])
+print("DONE")
 
 # train the model
-tb_callback = tf.keras.callbacks.TensorBoard(log_dir='./logs', histogram_freq=1)
-history = transformer.fit(ds, epochs=1000, callbacks=[tb_callback])
+print(transformer.summary())
+tb_callback = keras.callbacks.TensorBoard(log_dir='./logs', histogram_freq=1)
+early_stopping = keras.callbacks.EarlyStopping(
+    monitor='loss',
+    min_delta=0.001,
+    patience=5, 
+    restore_best_weights=True
+    )
+history = transformer.fit(ds, epochs=1000, callbacks=[tb_callback, early_stopping])
+transformer.save('./models/promoter_only')
 
 tb.notebook
