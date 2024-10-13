@@ -1,8 +1,8 @@
 import pandas as pd
 import keras
-import Bio
-
-# TODO: Use Biopython to load human reference genome from GenBank Flat File
+import tensorflow as tf
+from Bio import SeqIO
+import numpy as np
 
 def load_promoter_sequences(promoter_file):
     data = pd.read_csv(promoter_file, header=None)
@@ -36,3 +36,35 @@ def preprocess_promoter_sequences(promoter_sequences):
     whole_sequences = encoding(whole_sequences)
 
     return in_sequences, out_sequences, whole_sequences
+
+
+def ingest_refseq_genome(file_path:str, 
+                           kmer_size:int, 
+                           contig_size_range:tuple, 
+                           vocab_embed:keras.layers.StringLookup) -> np.array:
+    """
+    Ingests refseq genome from FASTA, batch processes it into kmers, and generates contigs for training.
+    """
+    tokens = []
+    print("=== Reading Genomic Data ===")
+    with open(file_path, 'r') as file:
+        for i, seqrec in enumerate(SeqIO.parse(file, 'fasta')):
+            # tokenize each fasta entry
+            sequence = list(str(seqrec.seq))
+            for nt_index in range(0, len(sequence), kmer_size):
+                kmer = sequence[nt_index:nt_index+kmer_size]
+                tokens.append(kmer)                
+            # print progress
+            if i % 10 == 0:
+                print(f"-> {i} records loaded")
+    print("=== RefSeq Genome Loaded ===")
+    print(f"Total Tokens: {len(tokens)}")
+
+    return tokens
+    
+
+def construct_tf_dataset(contigs: np.array) -> tf.data.Dataset:
+    """
+    Smooths out the contigs into a tf.data.Dataset object for training the transformer model with zero padding.
+    """
+    pass

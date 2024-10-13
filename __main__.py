@@ -2,28 +2,52 @@ import tensorflow as tf
 import keras
 import tensorboard as tb
 
-from preprocessing import load_promoter_sequences, preprocess_promoter_sequences
+from preprocessing import (
+    load_promoter_sequences, 
+    preprocess_promoter_sequences, 
+    ingest_refseq_genome, 
+    construct_tf_dataset
+)
 from model import Transformer
 
 
 # load and preprocess the data
-sequences = load_promoter_sequences('./data/promoters.data')
-in_tensor, out_tensor, whole_tensor = preprocess_promoter_sequences(sequences)
-in_tensor = tf.pad(in_tensor, [[0, 0], [0, 1],[0,0]])
-out_tensor = tf.pad(out_tensor, [[0, 0], [0, 1],[0,0]])
+genome = ingest_refseq_genome(
+  file_path='./data/ncbi_dataset/data/GCF_000001405.40/GCF_000001405.40_GRCh38.p14_genomic.fna',
+  kmer_size=3,
+  contig_size_range=(500, 1000),
+  vocab_embed=keras.layers.StringLookup(
+    oov_token='[UNK]',
+    mask_token='[MASK]',
+    output_mode='one_hot'
+  ),
+)
+exit(0)
 
-inputs = (whole_tensor, in_tensor)
-labels = out_tensor
-ds = tf.data.Dataset.from_tensor_slices((inputs, labels))
-print(ds)
+#sequences = load_promoter_sequences('./data/promoters.data')
+#in_tensor, out_tensor, whole_tensor = preprocess_promoter_sequences(sequences)
+#in_tensor = tf.pad(in_tensor, [[0, 0], [0, 1],[0,0]])
+#out_tensor = tf.pad(out_tensor, [[0, 0], [0, 1],[0,0]])
+
+#inputs = (whole_tensor, in_tensor)
+#labels = out_tensor
+#ds = tf.data.Dataset.from_tensor_slices((inputs, labels))
+#print(ds)
+
+# vocabulary
+initial_embedder = keras.layers.StringLookup(
+    oov_token='[UNK]',
+    mask_token='[MASK]',
+    output_mode='one_hot'
+)
 
 # initialize the model
 num_layers = 8
 d_model = 128
 num_heads = 8
 dff = 1024
-input_vocab_size = 6
-target_vocab_size = 6
+input_vocab_size = len(initial_embedder.get_vocabulary())
+target_vocab_size = len(initial_embedder.get_vocabulary())
 dropout_rate = 0.2
 
 transformer = Transformer(
