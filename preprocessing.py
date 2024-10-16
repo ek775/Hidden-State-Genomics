@@ -3,6 +3,8 @@ import keras
 import tensorflow as tf
 from Bio import SeqIO
 import numpy as np
+from pyspark.sql import SparkSession
+from pyspark.sql import Row
 
 def load_promoter_sequences(promoter_file):
     data = pd.read_csv(promoter_file, header=None)
@@ -41,26 +43,39 @@ def preprocess_promoter_sequences(promoter_sequences):
 def ingest_refseq_genome(file_path:str, 
                            kmer_size:int, 
                            contig_size_range:tuple, 
-                           vocab_embed:keras.layers.StringLookup) -> np.array:
+                           vocab_embed:keras.layers.StringLookup) -> SparkSession:
     """
-    Ingests refseq genome from FASTA, batch processes it into kmers, and generates contigs for training.
+    Ingests refseq genome from FASTA, passes each entry to spark. Returns a spark session for accessing the data
     """
-    tokens = []
+    spark = SparkSession.builder.getOrCreate()
+    refseq_dfs = []
     print("=== Reading Genomic Data ===")
     with open(file_path, 'r') as file:
         for i, seqrec in enumerate(SeqIO.parse(file, 'fasta')):
-            # tokenize each fasta entry
-            sequence = list(str(seqrec.seq))
-            for nt_index in range(0, len(sequence), kmer_size):
-                kmer = sequence[nt_index:nt_index+kmer_size]
-                tokens.append(kmer)                
+            # read sequence
+            sequence = str(seqrec.seq)
+            # make into list for fancy matrix dicing
+            sequence = list(sequence)
+            array = []
+            print(f"-> Processing {seqrec.id}")
+            for i in range(kmer_size):
+                new_slice = sequence[i::kmer_size]
+                array.append(new_slice)
+            array = np.array(array)
+            array = array.T
+            # store kmers in spark dataframe
+            print(f"Exporting {seqrec.id} to spark dataframe")
+            n_rows = [Row(id=seqrec.id, description=seqrec.description, kmer=''.join(r)) for r in array]
+
+            df = spark.createDataFrame([n_rows]) # row = dataframe to get around 2gb serialization limit        
+            refseq_dfs.append(df)
             # print progress
             if i % 10 == 0:
                 print(f"-> {i} records loaded")
+    
     print("=== RefSeq Genome Loaded ===")
-    print(f"Total Tokens: {len(tokens)}")
 
-    return tokens
+    return spark, refseq_dfs, vocab_embed
     
 
 def construct_tf_dataset(contigs: np.array) -> tf.data.Dataset:

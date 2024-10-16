@@ -12,7 +12,7 @@ from model import Transformer
 
 
 # load and preprocess the data
-genome = ingest_refseq_genome(
+spark, refseq_dfs, vocab_embed = ingest_refseq_genome(
   file_path='./data/ncbi_dataset/data/GCF_000001405.40/GCF_000001405.40_GRCh38.p14_genomic.fna',
   kmer_size=3,
   contig_size_range=(500, 1000),
@@ -35,11 +35,11 @@ exit(0)
 #print(ds)
 
 # vocabulary
-initial_embedder = keras.layers.StringLookup(
-    oov_token='[UNK]',
-    mask_token='[MASK]',
-    output_mode='one_hot'
-)
+#initial_embedder = keras.layers.StringLookup(
+#    oov_token='[UNK]',
+#    mask_token='[MASK]',
+#    output_mode='one_hot'
+#)
 
 # initialize the model
 num_layers = 8
