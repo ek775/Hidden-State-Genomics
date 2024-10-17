@@ -12,16 +12,18 @@ from model import Transformer
 
 
 # load and preprocess the data
-spark, refseq_dfs, vocab_embed = ingest_refseq_genome(
+spark = ingest_refseq_genome(
   file_path='./data/ncbi_dataset/data/GCF_000001405.40/GCF_000001405.40_GRCh38.p14_genomic.fna',
   kmer_size=3,
-  contig_size_range=(500, 1000),
-  vocab_embed=keras.layers.StringLookup(
-    oov_token='[UNK]',
-    mask_token='[MASK]',
-    output_mode='one_hot'
-  ),
 )
+
+# batch process kmer chunks into varying length sequences
+#contig_size_range=(500, 1000),
+#  vocab_embed=keras.layers.StringLookup(
+#    oov_token='[UNK]',
+#    mask_token='[MASK]',
+#    output_mode='one_hot'
+#  ),
 exit(0)
 
 #sequences = load_promoter_sequences('./data/promoters.data')

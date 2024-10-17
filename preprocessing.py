@@ -5,6 +5,7 @@ from Bio import SeqIO
 import numpy as np
 from pyspark.sql import SparkSession
 from pyspark.sql import Row
+from pyspark import StorageLevel
 
 def load_promoter_sequences(promoter_file):
     data = pd.read_csv(promoter_file, header=None)
@@ -48,7 +49,7 @@ def ingest_refseq_genome(file_path:str,
     Ingests refseq genome from FASTA, passes each entry to spark. Returns a spark session for accessing the data
     """
     spark = SparkSession.builder.getOrCreate()
-    refseq_dfs = []
+    refseq_main_df = spark.createDataFrame([], schema="id STRING, description STRING, kmer STRING")
     print("=== Reading Genomic Data ===")
     with open(file_path, 'r') as file:
         for i, seqrec in enumerate(SeqIO.parse(file, 'fasta')):
@@ -58,24 +59,23 @@ def ingest_refseq_genome(file_path:str,
             sequence = list(sequence)
             array = []
             print(f"-> Processing {seqrec.id}")
-            for i in range(kmer_size):
-                new_slice = sequence[i::kmer_size]
+            for k in range(kmer_size):
+                new_slice = sequence[k::kmer_size]
                 array.append(new_slice)
             array = np.array(array)
             array = array.T
             # store kmers in spark dataframe
-            print(f"Exporting {seqrec.id} to spark dataframe")
+            print(f"Generating entries {seqrec.id}")
             n_rows = [Row(id=seqrec.id, description=seqrec.description, kmer=''.join(r)) for r in array]
-
+            print(f"Exporting {seqrec.id} to spark dataframe")
             df = spark.createDataFrame([n_rows]) # row = dataframe to get around 2gb serialization limit        
-            refseq_dfs.append(df)
+            df.write.csv(f"RefSeqProcessedData{kmer_size}/{seqrec.id}.csv", header=True)
             # print progress
-            if i % 10 == 0:
-                print(f"-> {i} records loaded")
+            print(f"-> {i} records loaded")
     
     print("=== RefSeq Genome Loaded ===")
 
-    return spark, refseq_dfs, vocab_embed
+    return spark
     
 
 def construct_tf_dataset(contigs: np.array) -> tf.data.Dataset:
