@@ -8,7 +8,7 @@ from preprocessing import (
     ingest_refseq_genome, 
     construct_tf_dataset
 )
-from model import Transformer
+from transformer import Transformer
 
 
 # load and preprocess the data

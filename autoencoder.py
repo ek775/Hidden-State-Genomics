@@ -2,7 +2,7 @@ import tensorflow as tf
 import keras
 from keras import layers
 import numpy as np
-import tensorboard as tb
+from tensorboard import program
 import Bio
 import transformers
 
@@ -13,7 +13,7 @@ ef = 4
 
 print("=== Generating Test Data ===")
 fake_embeddings = tf.random.uniform(shape=[1000, embed_length])
-fake_dataset = tf.data.Dataset.from_tensor_slices((fake_embeddings, fake_embeddings))
+fake_dataset = tf.data.Dataset.from_tensor_slices((fake_embeddings, fake_embeddings)).batch(100)
 
 # TODO: load ESM-2 and NTv2 models + data + tokenizers from hugging face
 
@@ -24,10 +24,9 @@ class Encoder(layers.Layer):
     def __init__(self, encoding_size:int, n_features:int):
         super().__init__()
         self.input_layer = layers.InputLayer(shape=(encoding_size,))
-        self.features = layers.Dense(units=n_features, kernel_regularizer='l1', activity_regularizer='l1', activation='relu', input_shape=(encoding_size,))
+        self.features = layers.Dense(units=n_features, kernel_regularizer='l1', activity_regularizer='l1', activation='relu')
 
     def call(self, x):
-        x = self.input_layer(x)
         x = self.features(x)
         return x
 
@@ -39,7 +38,6 @@ class Decoder(layers.Layer):
         self.output_layer = layers.Dense(units=encoding_size, activation='relu')
 
     def call(self, x):
-        x = self.input_layer(x)
         x = self.output_layer(x)
         return x
 
@@ -64,20 +62,13 @@ optimizer = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
 
 # initialize the loss function
-loss = keras.losses.SparseCategoricalCrossentropy(
-    from_logits=True,
-    reduction='none',
-    name='sparse_categorical_crossentropy'
-)
+loss = keras.losses.MeanSquaredError()
 
 # initialize the metrics
 metrics = [
     keras.metrics.AUC(from_logits=True),
-    keras.metrics.SparseCategoricalCrossentropy(
-        name='sparse_categorical_crossentropy',
-        from_logits=True,
-        axis=-1
-    )
+    keras.metrics.CosineSimilarity(),
+    keras.metrics.MeanSquaredError(),
 ]
 
 # compile the model
@@ -88,15 +79,18 @@ print(autoencoder.summary())
 
 tb_callback = keras.callbacks.TensorBoard(log_dir=f'./logs/{SAE_name}', histogram_freq=5)
 early_stopping = keras.callbacks.EarlyStopping(
-    monitor='loss',
+    monitor='mean_squared_error',
     min_delta=0.001,
-    patience=5, 
+    patience=10, 
     restore_best_weights=True
     )
 
 print("=== Training Model ===")
 history = autoencoder.fit(fake_dataset, epochs=100, callbacks=[tb_callback, early_stopping])
 print("=== Saving Model ===")
-autoencoder.save(f'./models/{SAE_name}')
+autoencoder.save(f'./models/{SAE_name}.keras')
 print("Displaying Results in Tensorboard...")
-tb.notebook.start('--logdir ./logs')
+tb = program.TensorBoard()
+tb.configure(argv=[None, '--logdir', './logs'])
+url = tb.launch()
+print(f"TensorBoard started at {url}")
