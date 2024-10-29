@@ -2,12 +2,11 @@ import tensorflow as tf
 import keras
 from keras import layers
 import numpy as np
-from tensorboard import program
 import Bio
 import transformers
 
 # create dataset from random tensors to test
-SAE_name = 'autoencoder.test'
+SAE_name = 'autoencoder_test'
 embed_length = 2048
 ef = 4
 
@@ -18,35 +17,86 @@ fake_dataset = tf.data.Dataset.from_tensor_slices((fake_embeddings, fake_embeddi
 # TODO: load ESM-2 and NTv2 models + data + tokenizers from hugging face
 
 # define our autoencoder in encoder / decoder components
+@keras.utils.register_keras_serializable()
 class Encoder(layers.Layer):
     # L1 gives us sparsity
     # project model activations into high-dimensional space
-    def __init__(self, encoding_size:int, n_features:int):
-        super().__init__()
+    def __init__(self, encoding_size:int, n_features:int, **kwargs):
+        super(Encoder, self).__init__(**kwargs)
         self.input_layer = layers.InputLayer(shape=(encoding_size,))
         self.features = layers.Dense(units=n_features, kernel_regularizer='l1', activity_regularizer='l1', activation='relu')
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "input_layer":self.input_layer,
+                "features":self.features
+            }
+        )
+        return config
+    
+    def from_config(cls, config):
+        config["input_layer"] = layers.deserialize(config["input_layer"])
+        config["features"] = layers.deserialize(config["features"])
+        return cls(**config)
 
     def call(self, x):
         x = self.features(x)
         return x
 
+@keras.utils.register_keras_serializable()
 class Decoder(layers.Layer):
     # trained weights here give us the "feature directions"
-    def __init__(self, n_features:int, encoding_size:int):
-        super().__init__()
+    def __init__(self, n_features:int, encoding_size:int, **kwargs):
+        super(Decoder, self).__init__(**kwargs)
         self.input_layer = layers.Input(shape=(n_features,))
         self.output_layer = layers.Dense(units=encoding_size, activation='relu')
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "input_layer":self.input_layer,
+                "output_layer":self.output_layer
+            }
+        )
+        return config
+    
+    def from_config(cls, config):
+        config["input_layer"] = layers.deserialize(config["input_layer"])
+        config["output_layer"] = layers.deserialize(config["output_layer"])
+        return cls(**config)
 
     def call(self, x):
         x = self.output_layer(x)
         return x
 
-class SparseAutoEncoder(tf.keras.Model):
-    def __init__(self, encoding_size:int, expansion_factor:int):
-        super().__init__()
+@keras.utils.register_keras_serializable()
+class SparseAutoEncoder(keras.Model):
+    def __init__(self, encoding_size:int, expansion_factor:int, **kwargs):
+        super(SparseAutoEncoder, self).__init__(**kwargs)
         self.n_features = encoding_size * expansion_factor
         self.encoder = Encoder(encoding_size=encoding_size, n_features=self.n_features)
         self.decoder = Decoder(n_features=self.n_features, encoding_size=encoding_size)
+    
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "encoder":self.encoder,
+                "decoder":self.decoder,
+                "n_features":self.n_features,
+            }
+        )
+        return config
+    
+    @classmethod
+    def from_config(cls, config):
+        config["encoder"] = layers.deserialize(config["encoder"])
+        config["decoder"] = layers.deserialize(config["decoder"])
+        config["n_features"] = layers.deserialize(config["n_features"])
+        return cls(**config)
 
     def call(self, x):
         x = self.encoder(x)
@@ -88,9 +138,8 @@ early_stopping = keras.callbacks.EarlyStopping(
 print("=== Training Model ===")
 history = autoencoder.fit(fake_dataset, epochs=100, callbacks=[tb_callback, early_stopping])
 print("=== Saving Model ===")
-autoencoder.save(f'./models/{SAE_name}.keras')
-print("Displaying Results in Tensorboard...")
-tb = program.TensorBoard()
-tb.configure(argv=[None, '--logdir', './logs'])
-url = tb.launch()
-print(f"TensorBoard started at {url}")
+path = f'./models/{SAE_name}.keras'
+#autoencoder.save(f'./models/{SAE_name}.keras')
+keras.models.save_model(autoencoder, path)
+print(f"Model saved to: {path}")
+print(autoencoder.summary())

@@ -1,6 +1,5 @@
 import tensorflow as tf
 import keras
-import tensorboard as tb
 
 from preprocessing import (
     load_promoter_sequences, 
