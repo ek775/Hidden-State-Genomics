@@ -16,103 +16,45 @@ fake_dataset = tf.data.Dataset.from_tensor_slices((fake_embeddings, fake_embeddi
 
 # TODO: load ESM-2 and NTv2 models + data + tokenizers from hugging face
 
-# define our autoencoder in encoder / decoder components
-@keras.saving.register_keras_serializable(package='SAE', name='Encoder')
-class Encoder(layers.Layer):
-    # L1 gives us sparsity
-    # project model activations into high-dimensional space
-    def __init__(self, encoding_size:int, n_features:int, **kwargs):
-        super(Encoder, self).__init__(**kwargs)
-        self.encoding_size = encoding_size
-        self.input_layer = layers.InputLayer(shape=(encoding_size,))
-        self.features = layers.Dense(units=n_features, kernel_regularizer='l1', activity_regularizer='l1', activation='relu')
-
-    def get_config(self):
-        config = super().get_config()
-        config.update(
-            {
-                "input_layer":self.input_layer,
-                "features":self.features
-            }
-        )
-        return config
-    
-    def from_config(cls, config):
-        config["input_layer"] = keras.saving.deserialize_keras_object(config["input_layer"])
-        config["features"] = keras.saving.deserialize_keras_object(config["features"])
-        return cls(**config)
-
-    def build(self, input_shape):
-        self.add_weight(
-            shape=(input_shape[-1], self.encoding_size),
-            initializer="glorot_uniform",
-            trainable=True
-        )
-
-    def call(self, x):
-        x = self.features(x)
-        return x
-
-@keras.saving.register_keras_serializable(package='SAE', name='Decoder')
-class Decoder(layers.Layer):
-    # trained weights here give us the "feature directions"
-    def __init__(self, n_features:int, encoding_size:int, **kwargs):
-        super(Decoder, self).__init__(**kwargs)
-        self.n_features = n_features
-        self.input_layer = layers.Input(shape=(n_features,))
-        self.output_layer = layers.Dense(units=encoding_size, activation='relu')
-
-    def get_config(self):
-        config = super().get_config()
-        config.update(
-            {
-                "input_layer":self.input_layer,
-                "output_layer":self.output_layer
-            }
-        )
-        return config
-    
-    def from_config(cls, config):
-        config["input_layer"] = keras.saving.deserialize_keras_object(config["input_layer"])
-        config["output_layer"] = keras.saving.deserialize_keras_object(config["output_layer"])
-        return cls(**config)
-
-    def build(self, input_shape):
-        self.add_weight(
-            shape=(input_shape[-1], self.n_features),
-            initializer="glorot_uniform",
-            trainable=True
-        )
-
-    def call(self, x):
-        x = self.output_layer(x)
-        return x
-
 @keras.saving.register_keras_serializable(package='SAE', name='SparseAutoEncoder')
 class SparseAutoEncoder(keras.Model):
     def __init__(self, encoding_size:int, expansion_factor:int, **kwargs):
-        super(SparseAutoEncoder, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.n_features = encoding_size * expansion_factor
-        self.encoder = Encoder(encoding_size=encoding_size, n_features=self.n_features)
-        self.decoder = Decoder(n_features=self.n_features, encoding_size=encoding_size)
+        self.input_layer = layers.InputLayer(shape=(encoding_size,))
+        self.encoder = layers.Dense(
+            units=self.n_features,
+            activation='relu',
+            kernel_regularizer='l1',
+            activity_regularizer='l1'
+        )
+        self.decoder = layers.Dense(units=encoding_size, activation='relu')
+        self.last_features = None
     
     def get_config(self):
-        config = super().get_config()
+        config = super().get_config().copy()
         config.update(
             {
+                "input_layer":self.input_layer,
                 "encoder":self.encoder,
                 "decoder":self.decoder,
                 "n_features":self.n_features,
+                "encoding_size":self.decoder.units,
+                "expansion_factor":self.n_features/self.decoder.units
             }
         )
         return config
     
     @classmethod
     def from_config(cls, config):
-        config["encoder"] = keras.saving.deserialize_keras_object(config["encoder"])
-        config["decoder"] = keras.saving.deserialize_keras_object(config["decoder"])
-        config["n_features"] = keras.saving.deserialize_keras_object(config["n_features"])
         return cls(**config)
+    
+    def build(self, input_shape):
+        self.add_weight(
+            shape=(input_shape[-1],),
+            initializer="glorot_uniform",
+            trainable=True
+        )
 
     def call(self, x):
         x = self.encoder(x)
