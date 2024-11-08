@@ -2,7 +2,7 @@ import pandas as pd
 import json
 
 # load data
-with open('./data/query_all_heme_vars.json', 'r', encoding='latin-1') as file:
+with open('../data/query_all_heme_vars.json', 'r', encoding='latin-1') as file:
     metadata = json.load(file)
 
 # find all functional assay types
@@ -39,13 +39,13 @@ func_columns = pd.DataFrame(func_annotations)
 print("Results:")
 print(func_columns.head())
 print("===== Merging with embeddings =====")
-data = pd.read_csv('./data/hbvar_with_embeddings.csv')
+data = pd.read_csv('../data/hbvar_with_embeddings.csv')
 print(data.head())
 data.drop(columns=['functionalStudies'], inplace=True)
 data = pd.merge(data, func_columns, how='left', left_on="name", right_on="name")
 print("Results:")
 print(data.head())
 print("===== Saving to file =====")
-path = './data/hbvar-w-func-embed-seq.csv'
+path = '../data/hbvar-w-func-embed-seq.csv'
 data.to_csv(path, index=False)
 print(f"Saved to file: {path}")
