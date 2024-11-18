@@ -6,15 +6,24 @@ class SparseAutoEncoder(tf.keras.Model):
     def __init__(self, encoding_size:int, expansion_factor:int, name="sparse_auto_encoder", **kwargs):
         super().__init__(name=name, **kwargs)
         self.n_features = encoding_size * expansion_factor
-        self.input_layer = tf.keras.layers.InputLayer(input_shape=(encoding_size,))
+        self.input_layer = tf.keras.layers.InputLayer(
+            shape=(encoding_size,),
+            name='input'
+            )
         self.encoder = tf.keras.layers.Dense(
             units=self.n_features,
             use_bias=False,
             activation='relu',
             kernel_regularizer='l1',
-            activity_regularizer='l1'
+            activity_regularizer='l1',
+            name='encoder'
         )
-        self.decoder = tf.keras.layers.Dense(units=encoding_size, use_bias=False, activation='relu')
+        self.decoder = tf.keras.layers.Dense(
+            units=encoding_size, 
+            use_bias=False, 
+            activation='relu',
+            name='decoder'
+            )
         self.last_features = None
 
     def call(self, x):
