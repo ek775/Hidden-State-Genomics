@@ -156,8 +156,7 @@ cython_debug/
 
 # Large Files
 /data/ncbi_dataset
-/logs
-/models
+/data/heme_SAE_train.csv
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
