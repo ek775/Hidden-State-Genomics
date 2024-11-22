@@ -40,12 +40,12 @@ with open('../data/swissprot/uniprot_sprot.fasta') as f:
         # save embeddings as numpy binaries
         with open(f"{embed_directory}{id}.npy", "wb") as f:
             np.save(f, np.array(output.last_hidden_state))
+        os.system(f"gcloud storage cp {embed_directory}{id}.npy gs://ek990/swiss-prot-esm-1280/embeddings/{id}.npy")
 
         # append metadata to csv
         with open(meta_file, 'a') as f:
             csv_writer = writer(f)
             csv_writer.writerow([id, description, sequence])
 
-# upload data to cloud storage
-os.system(f"gcloud storage cp -r {embed_directory} gs://ek990/swiss-prot-esm-1280/embeddings/")
+# upload metadata to cloud storage
 os.system(f"gcloud storage cp {meta_file} gs://ek990/swiss-prot-esm-1280/sequece_metadata.csv")
