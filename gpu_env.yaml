@@ -1,4 +1,4 @@
-name: hsg
+name: hsg-gpu
 channels:
   - conda-forge
   - defaults
