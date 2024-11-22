@@ -1,7 +1,7 @@
 import os
 from Bio import SeqIO
 import numpy as np
-from transformers import AutoTokenizer, TFAutoModel
+from transformers import AutoTokenizer, TFEsmModel
 from csv import writer
 from tqdm import tqdm
 
@@ -24,7 +24,7 @@ os.makedirs(embed_directory, exist_ok=True)
 # load model
 hug_face_id = "facebook/esm2_t33_650M_UR50D"
 tokenizer = AutoTokenizer.from_pretrained(hug_face_id)
-ESM_1280 = TFAutoModel.from_pretrained(hug_face_id)
+ESM_1280 = TFEsmModel.from_pretrained(hug_face_id)
 
 with open('../data/swissprot/uniprot_sprot.fasta') as f:
     for entry in tqdm(SeqIO.parse(f, 'fasta'), total=572214):
