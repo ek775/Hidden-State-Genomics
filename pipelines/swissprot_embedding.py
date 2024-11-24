@@ -21,13 +21,7 @@ os.makedirs(embed_directory, exist_ok=True)
 
 # load model
 hug_face_id = "facebook/esm2_t33_650M_UR50D"
-workers = [
-    (
-        AutoTokenizer.from_pretrained(hug_face_id), 
-        TFEsmModel.from_pretrained(hug_face_id)
-     )
-     for i in range(num_workers)
-]
+workers = [(AutoTokenizer.from_pretrained(hug_face_id), TFEsmModel.from_pretrained(hug_face_id)) for i in range(num_workers)]
 
 # core function
 async def embed(SeqIO_entry, tokenizer, esm_model):
