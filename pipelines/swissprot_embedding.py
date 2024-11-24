@@ -8,7 +8,7 @@ import asyncio
 
 
 # load swissprot data and generate embeddings
-num_workers = sys.argv[0]
+num_workers = int(sys.argv[0])
 
 # file locations and ids
 embed_directory = './data/swissprot/embeddings/'
