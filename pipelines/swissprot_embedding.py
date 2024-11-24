@@ -8,11 +8,7 @@ import asyncio
 
 
 # load swissprot data and generate embeddings
-if len(sys.argv) != 2:
-    raise Exception("This script requires a starting position (int) and the number of ESM instances this system is capable of handling (int).")
-
-restart = sys.argv[0]
-num_workers = sys.argv[1]
+num_workers = sys.argv[0]
 
 # file locations and ids
 embed_directory = './data/swissprot/embeddings/'
