@@ -1,4 +1,4 @@
-import os, sys
+import os
 from Bio import SeqIO
 import numpy as np
 from transformers import AutoTokenizer, TFEsmModel
@@ -8,7 +8,7 @@ import asyncio
 
 
 # load swissprot data and generate embeddings
-num_workers = int(sys.argv[0])
+num_workers = 8
 
 # file locations and ids
 embed_directory = './data/swissprot/embeddings/'
