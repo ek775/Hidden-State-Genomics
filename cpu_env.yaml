@@ -243,7 +243,12 @@ dependencies:
   - zlib=1.2.13=h5eee18b_1
   - zstd=1.5.6=hc292b87_0
   - pip:
+      - array-record==0.5.1
       - cachetools==5.5.0
+      - click==8.1.7
+      - dm-tree==0.1.8
+      - docstring-parser==0.16
+      - etils==1.11.0
       - google-api-core==2.23.0
       - google-auth==2.36.0
       - google-cloud-core==2.4.1
@@ -251,11 +256,14 @@ dependencies:
       - google-crc32c==1.6.0
       - google-resumable-media==2.7.2
       - googleapis-common-protos==1.66.0
+      - immutabledict==4.2.1
+      - importlib-resources==6.4.5
       - joblib==1.4.2
       - keras==3.6.0
       - libclang==18.1.1
       - llvmlite==0.43.0
       - numba==0.60.0
+      - promise==2.3
       - proto-plus==1.25.0
       - pyasn1==0.6.1
       - pyasn1-modules==0.4.1
@@ -263,9 +271,13 @@ dependencies:
       - rsa==4.9
       - scikit-learn==1.5.2
       - scipy==1.14.1
+      - simple-parsing==0.1.6
       - tensorboard==2.18.0
       - tensorflow==2.18.0
+      - tensorflow-datasets==4.9.7
+      - tensorflow-metadata==1.16.1
       - tf-keras==2.18.0
       - threadpoolctl==3.5.0
+      - toml==0.10.2
       - umap-learn==0.5.7
 prefix: /home/ek224/anaconda3/envs/hsg
