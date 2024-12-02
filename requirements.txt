@@ -2,16 +2,14 @@
 
 # core packages
 transformers # limited compatibility with ESM-2 on tensorflow
-tensorflow # or tensorflow-gpu, note your machine configuration
+tensorflow # or tensorflow-gpu or tensorflow-tpu, note your machine configuration
 tensorflow-datasets # for loading datasets
-keras
-numpy
+tf-keras
 pandas
 biopython
 scikit-learn
 
 # visualization packages
-matplotlib
 seaborn
 jupyter
 plotly

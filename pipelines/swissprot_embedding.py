@@ -96,5 +96,5 @@ with open('./data/swissprot/uniprot_sprot.fasta') as f:
     for entry in tqdm(SeqIO.parse(f, 'fasta'), total=572214):
         sequence, id, description, embeddings = embed(entry, tokenizer, esm_model)
         data = preprocess(sequence, id, description, embeddings)
-        gcs_write_csv(gcs_client.get_bucket("ek990"), "sp-per-residue-embeddings.csv", data)
+        gcs_write_csv(gcs_client.get_bucket("ek990"), "tpu-sp-per-residue-embeddings.csv", data)
         
