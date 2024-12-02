@@ -84,16 +84,19 @@ def gcs_write_csv(bucket, path, data):
 # load resources
 gcs_client = get_client()
 hug_face_id = "facebook/esm2_t33_650M_UR50D"
+output_file = "sp-per-residue-embeddings.csv"
 print(f"Loading model and tokenizer: {hug_face_id}")
 tokenizer = AutoTokenizer.from_pretrained(hug_face_id)
 esm_model = TFEsmModel.from_pretrained(hug_face_id)
 
 # make output csv
+os.system(f"touch {output_file}")
+os.system(f"gsutil cp {output_file} gs://ek990/{output_file}")
 
 # generae embeddings
 with open('./data/swissprot/uniprot_sprot.fasta') as f:
     for entry in tqdm(SeqIO.parse(f, 'fasta'), total=572214):
         sequence, id, description, embeddings = embed(entry, tokenizer, esm_model)
         data = preprocess(sequence, id, description, embeddings)
-        gcs_write_csv(gcs_client.get_bucket("ek990"), "sp-per-residue-embeddings.csv", data)
+        gcs_write_csv(gcs_client.get_bucket("ek990"), output_file, data)
         
