@@ -73,7 +73,7 @@ def preprocess(sequence, id, description, embeddings):
 # write csv lines to bucket
 def gcs_write_csv(bucket, path, data):
     blob = bucket.blob(path)
-    with blob.open('w') as f:
+    with blob.open('a') as f:
         csv_writer = writer(f)
         csv_writer.writerows(data)
 
@@ -88,13 +88,12 @@ print(f"Loading model and tokenizer: {hug_face_id}")
 tokenizer = AutoTokenizer.from_pretrained(hug_face_id)
 esm_model = TFEsmModel.from_pretrained(hug_face_id)
 
-# main async loop
-async def main():
-    pass
+# make output csv
 
+# generae embeddings
 with open('./data/swissprot/uniprot_sprot.fasta') as f:
     for entry in tqdm(SeqIO.parse(f, 'fasta'), total=572214):
         sequence, id, description, embeddings = embed(entry, tokenizer, esm_model)
         data = preprocess(sequence, id, description, embeddings)
-        gcs_write_csv(gcs_client.get_bucket("ek990"), "tpu-sp-per-residue-embeddings.csv", data)
+        gcs_write_csv(gcs_client.get_bucket("ek990"), "sp-per-residue-embeddings.csv", data)
         
