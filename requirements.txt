@@ -1,0 +1,24 @@
+# python packages in venv (i.e. conda)
+
+# core packages
+transformers # limited compatibility with ESM-2 on tensorflow
+tensorflow # or tensorflow-gpu, note your machine configuration
+tensorflow-datasets # for loading datasets
+keras
+numpy
+pandas
+biopython
+scikit-learn
+
+# visualization packages
+matplotlib
+seaborn
+jupyter
+plotly
+ipywidgets
+ipykernel
+umap-learn
+
+# infrastructure sdks
+google-auth
+google-cloud-storage
