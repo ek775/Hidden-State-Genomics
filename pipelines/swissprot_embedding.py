@@ -17,7 +17,17 @@ from google.cloud import storage
 
 
 # tpu config
-if len(sys.argv) > 1 and sys.argv[1] == "tpu":
+if len(sys.argv) > 1:
+    try:
+        start = int(sys.argv[1])
+    except:
+        print("Could not convert restart value to int")
+        exit(0)
+
+else:
+    start = 1
+
+if len(sys.argv) > 2 and sys.argv[2] == "tpu":
     resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='local')
     tf.config.experimental_connect_to_cluster(resolver)
     tf.tpu.experimental.initialize_tpu_system(resolver)
@@ -91,8 +101,13 @@ esm_model = TFEsmModel.from_pretrained(hug_face_id)
 
 # generae embeddings
 with open('./data/swissprot/uniprot_sprot.fasta') as f:
+    count = 0
     for entry in tqdm(SeqIO.parse(f, 'fasta'), total=572214):
-        sequence, id, description, embeddings = embed(entry, tokenizer, esm_model)
-        data = preprocess(sequence, id, description, embeddings)
-        gcs_write_csv(gcs_client.get_bucket("ek990"), f"{output_dir}/{id}", data)
+        count +=1
+        if count < start:
+            continue
+        else:
+            sequence, id, description, embeddings = embed(entry, tokenizer, esm_model)
+            data = preprocess(sequence, id, description, embeddings)
+            gcs_write_csv(gcs_client.get_bucket("ek990"), f"{output_dir}/{id}", data)
         
