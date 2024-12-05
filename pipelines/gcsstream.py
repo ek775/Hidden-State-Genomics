@@ -15,11 +15,4 @@ def get_client() -> storage.Client:
     print(f"Authenticated to project {project_id}")
     return storage_client
 
-def data_stream(client:storage.Client, embeddings_path, metadata_path, batch_size=100):
 
-    """Stream data from Google Cloud Storage"""
-
-    return None
-
-embeddings = "gs://ek990/swiss-prot-esm-1280/embeddings/embeddings"
-metadata = "gs://ek990/swiss-prot-esm-1280/sequence_metadata.csv"
