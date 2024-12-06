@@ -1,9 +1,6 @@
 import google.auth
 from google.cloud import storage
-import os
-import numpy as np
-import asyncio
-import tensorflow_datasets as tfds
+import tensorflow as tf
 
 def get_client() -> storage.Client:
 
@@ -15,4 +12,25 @@ def get_client() -> storage.Client:
     print(f"Authenticated to project {project_id}")
     return storage_client
 
+def train_datastream(bucket, tfrecord_path_pattern) -> tf.data.TFRecordDataset:
 
+    """Configure TFRecords into a dataset for streaming from GCS"""
+
+    filenames = bucket.list_blobs(match_glob=tfrecord_path_pattern)
+    filenames = [f"gs://{bucket.name}/{f.name}" for f in filenames]
+    dataset = tf.data.TFRecordDataset(filenames=filenames)
+
+    return dataset
+
+def parse_tf_record(record) -> tf.Tensor:
+
+    """Parse a TFRecord into a tensor"""
+
+    description = {
+        "features": tf.io.FixedLenFeature([], tf.float32),
+        "labels": tf.io.FixedLenFeature([], tf.float32)
+    }
+
+    parsed = tf.io.parse_single_example(record, description)
+    
+    return parsed
