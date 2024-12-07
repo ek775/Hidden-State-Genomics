@@ -1,6 +1,6 @@
 import sys
 from tqdm import tqdm
-from pipelines.gcsstream import get_client, train_datastream
+from pipelines.gcsstream import get_client, train_datastream, parse_tf_record
 from objects.autoencoder import SparseAutoEncoder
 import keras
 import numpy as np
@@ -17,15 +17,19 @@ try:
 except AssertionError:
     print("Invalid input. Please provide a valid name, encoding size, and expansion factor.")
     sys.exit(1)
+
 encoding_size = int(encoding_size)
 expansion_factor = int(expansion_factor)
 
 model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
 
+
 # cloud data connection
 gcs_client = get_client()
 bucket = gcs_client.get_bucket("ek990")
 dataset = train_datastream(bucket, "sp-embed-tfrecords/*")
+dataset = dataset.map(parse_tf_record)
+
 
 # training configuration
 optimizer = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
@@ -40,8 +44,9 @@ early_stopping = keras.callbacks.EarlyStopping(monitor="mean_squared_error", min
 
 model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
+
 # training
-history = model.fit(dataset, epochs=1000, callbacks=[tb_callback, early_stopping])
+history = model.fit(dataset.batch(100), epochs=1000, callbacks=[tb_callback, early_stopping])
 
 # save model
 model.save(f"gs://ek990/autoencoder_models/{name}.keras")
@@ -49,9 +54,13 @@ model.save_weights(f"gs://ek990/autoencoder_models/{name}_weights.h5")
 print("Model saved to GCS.")
 print(model.summary())
 
+
+
 ############################################################################################################################################################
 ######   AUTOMATIC TESTING AND VISUALIZATION OF AUTOENCODER PERFORMANCE   ######
 ############################################################################################################################################################
+
+
 
 print("===== MSE =====")
 sns.lineplot(data=history.history['mean_squared_error'], label='Mean Squared Error')

@@ -27,10 +27,10 @@ def parse_tf_record(record) -> tf.Tensor:
     """Parse a TFRecord into a tensor"""
 
     description = {
-        "features": tf.io.FixedLenFeature([], tf.float32),
-        "labels": tf.io.FixedLenFeature([], tf.float32)
+        "features": tf.io.FixedLenFeature([1280], tf.float32),
+        "labels": tf.io.FixedLenFeature([1280], tf.float32)
     }
 
     parsed = tf.io.parse_single_example(record, description)
-    
-    return parsed
+
+    return (parsed["features"], parsed["labels"])
