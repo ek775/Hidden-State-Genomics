@@ -1,4 +1,4 @@
-import sys
+import sys, os
 from tqdm import tqdm
 from pipelines.gcsstream import get_client, train_datastream, parse_tf_record
 from objects.autoencoder import SparseAutoEncoder
@@ -29,6 +29,9 @@ gcs_client = get_client()
 bucket = gcs_client.get_bucket("ek990")
 dataset = train_datastream(bucket, "sp-embed-tfrecords/*")
 dataset = dataset.map(parse_tf_record)
+# TODO: add validation split
+# train = dataset.take(some_num)
+# val = dataset.skip(some_num)
 
 
 # training configuration
@@ -60,19 +63,21 @@ print(model.summary())
 ######   AUTOMATIC TESTING AND VISUALIZATION OF AUTOENCODER PERFORMANCE   ######
 ############################################################################################################################################################
 
-
+print("Generating Descriptive Statistics...")
+# send vis to bucket
+vis_path = f"gs://ek990/autoencoder_logs/{name}/Descriptive_Stats/"
 
 print("===== MSE =====")
 sns.lineplot(data=history.history['mean_squared_error'], label='Mean Squared Error')
 sns.lineplot(history.history['val_mean_squared_error'], label='Validation Mean Squared Error')
 plt.title("Mean Squared Error")
-plt.show()
+plt.savefig(vis_path + "MSE.png")
 
 print("===== LOSS =====")
 sns.lineplot(data=history.history['loss'], label='Loss')
 sns.lineplot(history.history['val_loss'], label='Validation Loss')
 plt.title("Loss")
-plt.show()
+plt.savefig(vis_path + "Loss.png")
 
 print("===== FEATURE WEIGHT DISTR =====")
 feat_weights = np.array(model.weights[1])
@@ -86,22 +91,27 @@ sns.histplot(feat_weights, kde=True)
 plt.title('Distribution of Feature Weights')
 plt.xlabel('Feature Weight')
 plt.ylabel('Frequency')
-plt.show()
+plt.savefig(vis_path + "Feature_Weights.png")
 
 sns.histplot(agg_feat_weights, kde=True)
 plt.title('Distribution of Per-Neuron Aggregate Feature Weights')
 plt.xlabel('Aggregate Feature Weight')
 plt.ylabel('Frequency')
-plt.show()
+plt.savefig(vis_path + "Aggregate_Feature_Weights.png")
 
 print("===== FEATURE OUTPUT DISTR =====")
-reconstructed_outputs, feature_outputs = model.predict_on_batch() #TODO
+# load per-residue heme embeddings
+heme_embed_path = "./data/variant_embeddings/all_vars"
+heme_embeddings = [np.load(f"{heme_embed_path}/{f}").squeeze() for f in os.listdir(heme_embed_path)]
+heme_embeddings = np.vstack(heme_embeddings)
+
+reconstructed_outputs, feature_outputs = model.predict_on_batch(heme_embeddings[1042:2042]) # arbitrary slice of 1000 per residue embeddings
 
 sns.histplot(feature_outputs.flatten(), kde=True)
 plt.title('Distribution of feature_outputs')
 plt.xlabel('Feature Value')
 plt.ylabel('Frequency')
-plt.show()
+plt.savefig(vis_path + "Feature_Outputs.png")
 
 print("===== WEIGHT VECTOR ORTHOGONALITY =====")
 def vector_angle(v1, v2):
@@ -141,11 +151,11 @@ sns.histplot(input_angles, kde=True)
 plt.title('Distribution of Input Angles')
 plt.xlabel('Angle (degrees)')
 plt.ylabel('Frequency')
-plt.show()
+plt.savefig(vis_path + "Input_Angles.png")
 
 # Plot histogram of output angles
 sns.histplot(output_angles, kde=True)
 plt.title('Distribution of Output Angles')
 plt.xlabel('Angle (degrees)')
 plt.ylabel('Frequency')
-plt.show()
+plt.savefig(vis_path + "Output_Angles.png")
