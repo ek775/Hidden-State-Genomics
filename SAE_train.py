@@ -38,7 +38,7 @@ dataset = dataset.map(parse_tf_record)
 
 # configure TPU
 resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
-    tpu="tf-2-18-0",
+    tpu="local",
     zone="us-central1-f",
     project="mccoylab",
     credentials="default"
