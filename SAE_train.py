@@ -2,10 +2,12 @@ import sys, os
 from tqdm import tqdm
 from pipelines.gcsstream import get_client, train_datastream, parse_tf_record
 from objects.autoencoder import SparseAutoEncoder
+import tensorflow as tf
 import keras
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+
 
 # configure autoencoder
 name = sys.argv[1]
@@ -21,6 +23,7 @@ except AssertionError:
 encoding_size = int(encoding_size)
 expansion_factor = int(expansion_factor)
 
+print(f"Configuring Sparse Autoencoder with encoding size {encoding_size} and expansion factor {expansion_factor}...")
 model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
 
 
@@ -33,6 +36,16 @@ dataset = dataset.map(parse_tf_record)
 # train = dataset.take(some_num)
 # val = dataset.skip(some_num)
 
+# configure TPU
+resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
+    tpu="tf-2-18-0",
+    zone="us-central1-f",
+    project="mccoylab",
+    credentials="default"
+)
+tf.config.experimental_connect_to_cluster(resolver)
+tf.tpu.experimental.initialize_tpu_system(resolver)
+print(f"Tensorflow can access {len(tf.config.list_logical_devices('TPU'))} TPUs.")
 
 # training configuration
 optimizer = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
