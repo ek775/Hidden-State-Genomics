@@ -9,7 +9,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-# configure autoencoder
+############################################################################################################################################################
+######   CONFIGURATION   ######
+############################################################################################################################################################
+
 name = sys.argv[1]
 encoding_size = sys.argv[2]
 expansion_factor = sys.argv[3]
@@ -23,22 +26,22 @@ except AssertionError:
 encoding_size = int(encoding_size)
 expansion_factor = int(expansion_factor)
 
-print(f"Configuring Sparse Autoencoder with encoding size {encoding_size} and expansion factor {expansion_factor}...")
-model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
-
-
 # cloud data connection
 gcs_client = get_client()
 bucket = gcs_client.get_bucket("ek990")
 dataset = train_datastream(bucket, "sp-embed-tfrecords/*")
 dataset = dataset.map(parse_tf_record)
-# TODO: add validation split
-# train = dataset.take(some_num)
-# val = dataset.skip(some_num)
+# split dataset
+val = dataset.take(1e6)
+train = dataset.skip(1e6)
+# training optimizations
+batch_size = 1000
+steps_per_epoch = 1e9 // batch_size
+validation_steps = 1e6 // batch_size
 
 # configure TPU
 resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
-    tpu="local",
+    tpu="tf-2-18-0",
     zone="us-central1-f",
     project="mccoylab",
     credentials="default"
@@ -46,10 +49,11 @@ resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
 tf.config.experimental_connect_to_cluster(resolver)
 tf.tpu.experimental.initialize_tpu_system(resolver)
 print(f"Tensorflow can access {len(tf.config.list_logical_devices('TPU'))} TPUs.")
+strategy = tf.distribute.TPUStrategy(resolver)
 
 # training configuration
 optimizer = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
-loss = keras.losses.MeanSquaredError()
+loss = keras.losses.MeanSquaredError(reduction="sum")
 metrics = [
     keras.metrics.MeanSquaredError(),
     keras.metrics.Metric(name='placeholder') # placeholder for training, feature output requires a 2nd metric to appease keras
@@ -58,11 +62,23 @@ metrics = [
 tb_callback = keras.callbacks.TensorBoard(log_dir=f"gs://ek990/autoencoder_logs/{name}")
 early_stopping = keras.callbacks.EarlyStopping(monitor="mean_squared_error", min_delta=0.001, patience=20, restore_best_weights=True)
 
-model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+print(f"Configuring Sparse Autoencoder with encoding size {encoding_size} and expansion factor {expansion_factor}...")
+with strategy.scope():
+    model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
+############################################################################################################################################################
+######   TRAINING AUTOENCODER   ######
+############################################################################################################################################################
 
-# training
-history = model.fit(dataset.batch(100), epochs=1000, callbacks=[tb_callback, early_stopping])
+history = model.fit(
+    x = train.shuffle(1e9, reshuffle_each_iteration=True).batch(batch_size), 
+    epochs = 1000,
+    steps_per_epoch = steps_per_epoch,
+    validation_data = val.shuffle(1e9, reshuffle_each_iteration=True),
+    validation_steps = validation_steps,
+    callbacks = [tb_callback, early_stopping]
+    )
 
 # save model
 model.save(f"gs://ek990/autoencoder_models/{name}.keras")
