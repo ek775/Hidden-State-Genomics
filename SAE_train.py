@@ -31,17 +31,20 @@ expansion_factor = int(expansion_factor)
 # cloud data connection
 gcs_client = get_client()
 bucket = gcs_client.get_bucket("ek990")
+print("Gathering and Prepping Data...")
 dataset = train_datastream(bucket, "sp-embed-tfrecords/*")
 dataset = dataset.map(parse_tf_record)
 # split dataset
-val = dataset.take(1e6)
-train = dataset.skip(1e6)
+val = dataset.take(int(1e6))
+train = dataset.skip(int(1e6))
+print("--- Data Ready ---")
 # training optimizations
 batch_size = 1000
 steps_per_epoch = 1e9 // batch_size
 validation_steps = 1e6 // batch_size
 
 # configure TPU
+print("Configuring TPU...")
 resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
     tpu="tf-2-18-0",
     zone="us-central1-f",
