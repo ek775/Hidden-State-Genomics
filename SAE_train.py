@@ -44,7 +44,7 @@ validation_steps = 1e6 // batch_size
 # configure TPU
 print("Configuring TPU...")
 resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
-    tpu="tf-2-18-0",
+    tpu="local",
     zone="us-central1-f",
     project="mccoylab",
     credentials="default"
