@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 ######   CONFIGURATION   ######
 ############################################################################################################################################################
 
+tf.compat.v1.disable_eager_execution()
+
 name = sys.argv[1]
 encoding_size = sys.argv[2]
 expansion_factor = sys.argv[3]
