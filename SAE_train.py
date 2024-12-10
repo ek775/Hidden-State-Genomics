@@ -13,43 +13,42 @@ import matplotlib.pyplot as plt
 ######   CONFIGURATION   ######
 ############################################################################################################################################################
 
-name = sys.argv[1]
-encoding_size = sys.argv[2]
-expansion_factor = sys.argv[3]
-
 try:
-    assert(name.isascii() and encoding_size.isnumeric() and expansion_factor.isnumeric())
-except AssertionError:
+    assert(sys.argv[1].isascii() and sys.argv[2].isnumeric() and sys.argv[3].isnumeric())
+except Exception as e:
     print("Invalid input. Please provide a valid name, encoding size, and expansion factor.")
-    sys.exit(1)
+    print("Usage: python3 SAE_train.py <name> <encoding_size> <expansion_factor>")
+    sys.exit(e)
 
-encoding_size = int(encoding_size)
-expansion_factor = int(expansion_factor)
+name: str = str(sys.argv[1])
+encoding_size: int = int(sys.argv[2])
+expansion_factor: int = int(sys.argv[3])
+batch_size: int = 1000
 
 # cloud data connection
 gcs_client = get_client()
 bucket = gcs_client.get_bucket("ek990")
-print("Gathering and Prepping Data...")
-dataset = train_datastream(bucket, "sp-embed-tfrecords/*")
-dataset = dataset.map(parse_tf_record)
+print("===== Data Connection Established =====")
+dataset = train_datastream(bucket, "sp-embed-tfrecords/*")  # note that shuffling is done within this function for performance reasons
 # split dataset
-val = dataset.take(int(1e6))
-train = dataset.skip(int(1e6))
+print("Partitioning Validation Data...")
+val = dataset.take(int(1e5))
+val = val.map(parse_tf_record)
+train = dataset.skip(int(1e5)).take(int(5e5))
+train = train.map(parse_tf_record)
 print("--- Data Ready ---")
-# training optimizations
-batch_size = 1000
-steps_per_epoch = 1e9 // batch_size
-validation_steps = 1e6 // batch_size
 
 # configure TPU
 print("Configuring TPU...")
 resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
-    tpu="local",
+   tpu="tf-2-18-0",
     zone="us-central1-f",
     project="mccoylab",
     credentials="default"
 )
+print(f"Connecting to TPU cluster {resolver.cluster_spec()}...")
 tf.config.experimental_connect_to_cluster(resolver)
+print("Initializing TPU system...")
 tf.tpu.experimental.initialize_tpu_system(resolver)
 print(f"Tensorflow can access {len(tf.config.list_logical_devices('TPU'))} TPUs.")
 strategy = tf.distribute.TPUStrategy(resolver)
@@ -75,12 +74,11 @@ with strategy.scope():
 ############################################################################################################################################################
 
 history = model.fit(
-    x = train.shuffle(1e9, reshuffle_each_iteration=True).batch(batch_size), 
+    x = train.batch(batch_size), 
     epochs = 1000,
-    steps_per_epoch = steps_per_epoch,
-    validation_data = val.shuffle(1e9, reshuffle_each_iteration=True),
-    validation_steps = validation_steps,
-    callbacks = [tb_callback, early_stopping]
+    validation_data = val.batch(batch_size),
+    callbacks = [tb_callback, early_stopping],
+    verbose = 2
     )
 
 # save model

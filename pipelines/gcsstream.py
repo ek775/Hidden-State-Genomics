@@ -1,6 +1,7 @@
 import google.auth
 from google.cloud import storage
 import tensorflow as tf
+import random
 
 def get_client() -> storage.Client:
 
@@ -16,9 +17,15 @@ def train_datastream(bucket, tfrecord_path_pattern) -> tf.data.TFRecordDataset:
 
     """Configure TFRecords into a dataset for streaming from GCS"""
 
+    print("Gathering TFRecords from GCS...")
     filenames = bucket.list_blobs(match_glob=tfrecord_path_pattern)
     filenames = [f"gs://{bucket.name}/{f.name}" for f in filenames]
-    dataset = tf.data.TFRecordDataset(filenames=filenames)
+    print(f"Found {len(filenames)} TFRecords.")
+    print("Shuffling entries for training...")
+    random.shuffle(filenames)
+    print("Creating dataset...")
+    dataset = tf.data.TFRecordDataset(filenames=filenames, num_parallel_reads=8)
+    print("--- Done ---")
 
     return dataset
 
