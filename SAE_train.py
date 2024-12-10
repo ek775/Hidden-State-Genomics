@@ -25,6 +25,24 @@ encoding_size: int = int(sys.argv[2])
 expansion_factor: int = int(sys.argv[3])
 batch_size: int = 1000
 
+
+# configure TPU
+print("Configuring TPU...")
+resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
+    tpu="local",
+#    zone="us-central1-f",
+#    project="mccoylab",
+#    credentials="default"
+)
+print(f"Connecting to TPU cluster {resolver.cluster_spec()}...")
+tf.config.experimental_connect_to_cluster(resolver)
+print("Initializing TPU system...")
+tf.tpu.experimental.initialize_tpu_system(resolver)
+print(f"Tensorflow can access {len(tf.config.list_logical_devices('TPU'))} TPUs.")
+print("===== TPU Ready =====")
+strategy = tf.distribute.TPUStrategy(resolver)
+
+
 # cloud data connection
 gcs_client = get_client()
 bucket = gcs_client.get_bucket("ek990")
@@ -38,20 +56,6 @@ train = dataset.skip(int(1e5)).take(int(5e5))
 train = train.map(parse_tf_record)
 print("--- Data Ready ---")
 
-# configure TPU
-print("Configuring TPU...")
-resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
-   tpu="tf-2-18-0",
-    zone="us-central1-f",
-    project="mccoylab",
-    credentials="default"
-)
-print(f"Connecting to TPU cluster {resolver.cluster_spec()}...")
-tf.config.experimental_connect_to_cluster(resolver)
-print("Initializing TPU system...")
-tf.tpu.experimental.initialize_tpu_system(resolver)
-print(f"Tensorflow can access {len(tf.config.list_logical_devices('TPU'))} TPUs.")
-strategy = tf.distribute.TPUStrategy(resolver)
 
 # training configuration
 optimizer = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
