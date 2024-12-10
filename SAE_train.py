@@ -25,22 +25,26 @@ encoding_size: int = int(sys.argv[2])
 expansion_factor: int = int(sys.argv[3])
 batch_size: int = 1000
 
+# TPU configuration
+print("===== Testing TPU Configuration =====")
+os.system("export TPU_NAME=tpu-vm-1")
+os.system("export TPU_LOAD_LIBRARY=0")
+
+# test TPU cluster connection
+os.system("python3 tpu_config_test.py")
+print("===== TPU Connection Test Complete =====")
+
 
 # configure TPU
-print("Configuring TPU...")
-resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
-#    tpu="", # allow vm to resolve address due to distribution
-#    zone="us-central1-f",
-#    project="mccoylab",
-#    credentials="default"
-)
+print("Configuring TPU for training...")
+resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
 print(f"Connecting to TPU cluster {resolver.cluster_spec()}...")
-tf.config.experimental_connect_to_cluster(resolver)
+tf.config.experimental_connect_to_cluster(resolver.cluster_spec())
 print("Initializing TPU system...")
 tf.tpu.experimental.initialize_tpu_system(resolver)
 print(f"Tensorflow can access {len(tf.config.list_logical_devices('TPU'))} TPUs.")
 print("===== TPU Ready =====")
-strategy = tf.distribute.TPUStrategy(resolver)
+strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
 
 # cloud data connection
