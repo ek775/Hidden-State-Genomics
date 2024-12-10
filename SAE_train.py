@@ -29,7 +29,7 @@ batch_size: int = 1000
 # configure TPU
 print("Configuring TPU...")
 resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
-    tpu="", # allow vm to resolve address due to distribution
+#    tpu="", # allow vm to resolve address due to distribution
 #    zone="us-central1-f",
 #    project="mccoylab",
 #    credentials="default"
