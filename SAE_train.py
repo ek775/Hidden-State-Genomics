@@ -27,11 +27,10 @@ batch_size: int = 1000
 
 # TPU configuration
 print("===== Testing TPU Configuration =====")
-os.system("export TPU_NAME=tpu-vm-1")
-os.system("export TPU_LOAD_LIBRARY=0")
 
 # test TPU cluster connection
 os.system("python3 tpu_config_test.py")
+
 print("===== TPU Connection Test Complete =====")
 
 

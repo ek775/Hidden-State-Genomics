@@ -1,5 +1,10 @@
 import tensorflow as tf
+import os
 print("Tensorflow version " + tf.__version__)
+
+os.system("export TPU_NAME=tpu-vm-1")
+os.system("export TPU_LOAD_LIBRARY=0")
+os.system("sudo rm -r /tmp/") # removing lockfile that seems to prevent tpu server startup
 
 cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
 print('Running on TPU ', cluster_resolver.cluster_spec().as_dict()['worker'])
