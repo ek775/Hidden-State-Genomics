@@ -31,7 +31,7 @@ else:
 name: str = str(sys.argv[1])
 encoding_size: int = int(sys.argv[2])
 expansion_factor: int = int(sys.argv[3])
-batch_size: int = 1000
+batch_size: int = 64
 
 # TPU configuration
 if tpu == True:

@@ -24,7 +24,7 @@ def train_datastream(bucket, tfrecord_path_pattern) -> tf.data.TFRecordDataset:
     print("Shuffling entries for training...")
     random.shuffle(filenames)
     print("Creating dataset...")
-    dataset = tf.data.TFRecordDataset(filenames=filenames, buffer_size=int(10e6), num_parallel_reads=8) # buffer size is in bytes
+    dataset = tf.data.TFRecordDataset(filenames=filenames)
     print("--- Done ---")
 
     return dataset
