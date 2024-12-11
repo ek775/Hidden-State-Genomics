@@ -12,6 +12,9 @@ import matplotlib.pyplot as plt
 ############################################################################################################################################################
 ######   CONFIGURATION   ######
 ############################################################################################################################################################
+if len(sys.argv) < 3:
+    raise Exception("""Invalid input. Please provide a valid name, encoding size, and expansion factor. \n
+                    Usage: python3 SAE_train.py <name> <encoding_size> <expansion_factor>""")
 
 try:
     assert(sys.argv[1].isascii() and sys.argv[2].isnumeric() and sys.argv[3].isnumeric())
@@ -20,30 +23,27 @@ except Exception as e:
     print("Usage: python3 SAE_train.py <name> <encoding_size> <expansion_factor>")
     sys.exit(e)
 
+if "tpu=true" in sys.argv:
+    tpu = True
+else:
+    tpu = False
+
 name: str = str(sys.argv[1])
 encoding_size: int = int(sys.argv[2])
 expansion_factor: int = int(sys.argv[3])
 batch_size: int = 1000
 
 # TPU configuration
-print("===== Testing TPU Configuration =====")
-
-# test TPU cluster connection
-os.system("python3 tpu_config_test.py")
-
-print("===== TPU Connection Test Complete =====")
-
-
-# configure TPU
-print("Configuring TPU for training...")
-resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
-print(f"Connecting to TPU cluster {resolver.cluster_spec().as_dict()['worker']}...")
-tf.config.experimental_connect_to_cluster(resolver)
-print("Initializing TPU system...")
-tf.tpu.experimental.initialize_tpu_system(resolver)
-print(f"Tensorflow can access {len(tf.config.list_logical_devices('TPU'))} TPUs.")
-print("===== TPU Ready =====")
-strategy = tf.distribute.experimental.TPUStrategy(resolver)
+if tpu == True:
+    print("===== Configuring TPU =====")
+    resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
+    print(f"Connecting to TPU cluster {resolver.cluster_spec().as_dict()['worker']}...")
+    tf.config.experimental_connect_to_cluster(resolver)
+    print("Initializing TPU system...")
+    tf.tpu.experimental.initialize_tpu_system(resolver)
+    print(f"Tensorflow can access {len(tf.config.list_logical_devices('TPU'))} TPUs.")
+    print("===== TPU Ready =====")
+    strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
 
 # cloud data connection
@@ -72,7 +72,11 @@ tb_callback = keras.callbacks.TensorBoard(log_dir=f"gs://ek990/autoencoder_logs/
 early_stopping = keras.callbacks.EarlyStopping(monitor="mean_squared_error", min_delta=0.001, patience=20, restore_best_weights=True)
 
 print(f"Configuring Sparse Autoencoder with encoding size {encoding_size} and expansion factor {expansion_factor}...")
-with strategy.scope():
+if tpu == True:
+    with strategy.scope():
+        model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
+        model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+else:
     model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
