@@ -75,7 +75,9 @@ if tpu == True:
 gcs_client = get_client()
 bucket = gcs_client.get_bucket("ek990")
 print("===== Data Connection Established =====")
-tfrecord_files = train_datastream(bucket, "sp-embed-tfrecords/*")  # note that shuffling is done within this function
+# get file names from bucket
+# note the file names are shuffled within the function
+tfrecord_files = train_datastream(bucket, "sp-embed-tfrecords/*")
 # split dataset
 print("Partitioning Validation Data...")
 # ensure full batches for training
@@ -87,17 +89,19 @@ val_steps = val_size // batch_size
 train, val = tfrecord_files[:train_size], tfrecord_files[train_size:train_size+val_size]
 del tfrecord_files # save some memory
 
-train = tf.data.TFRecordDataset(
-    filenames=train, 
-    buffer_size=0, # 1MB 
-    num_parallel_reads=tf.data.experimental.AUTOTUNE).map(parse_tf_record)
-tf.print(train)
+def make_dataset(filenames: list[str]) -> tf.data.Dataset:
+    return tf.data.TFRecordDataset(
+        filenames=filenames, 
+        buffer_size=0, # 1MB
+        num_parallel_reads=tf.data.experimental.AUTOTUNE).map(parse_tf_record)
 
-val = tf.data.TFRecordDataset(
-    filenames=val, 
-    buffer_size=0, # 1MB
-    num_parallel_reads=tf.data.experimental.AUTOTUNE).map(parse_tf_record)
-tf.print(val)
+if tpu == True:
+    with strategy.scope():
+        train = make_dataset(train)
+        val = make_dataset(val)
+else:
+    train = make_dataset(train)
+    val = make_dataset(val)
 
 print("--- Data Ready ---")
 
@@ -119,7 +123,6 @@ early_stopping = keras.callbacks.EarlyStopping(monitor="mean_squared_error", min
 # load model onto appropriate training device
 print(f"Configuring Sparse Autoencoder with encoding size {encoding_size} and expansion factor {expansion_factor}...")
 if tpu == True:
-    tf.print(strategy.scope())
     with strategy.scope():
         model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
         model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
