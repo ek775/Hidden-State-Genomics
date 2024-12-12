@@ -5,17 +5,30 @@ from objects.autoencoder import SparseAutoEncoder
 import tensorflow as tf
 import keras
 import numpy as np
+import random
 import seaborn as sns
 import matplotlib.pyplot as plt
+import logging
+
+# set up logging
+TF_CPP_VMODULE=segment=2
+convert_graph=2
+convert_nodes=2
+trt_engine_op=2
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler(tf.compat.v1.Session().as_default()))
+
+tensorflow_logger = tf.get_logger().setLevel("DEBUG")
+#tf.debugging.enable_check_numerics()
 
 
 ############################################################################################################################################################
 ######   CONFIGURATION   ######
 ############################################################################################################################################################
-if len(sys.argv) < 3:
-    raise Exception("""Invalid input. Please provide a valid name, encoding size, and expansion factor. \n
-                    Usage: python3 SAE_train.py <name> <encoding_size> <expansion_factor>""")
 
+# basic params from cmd line and environment
 try:
     assert(sys.argv[1].isascii() and sys.argv[2].isnumeric() and sys.argv[3].isnumeric())
 except Exception as e:
@@ -23,9 +36,13 @@ except Exception as e:
     print("Usage: python3 SAE_train.py <name> <encoding_size> <expansion_factor>")
     sys.exit(e)
 
-if "tpu=true" in sys.argv:
-    tpu = True
-else:
+tpu: bool = False
+try:
+    libtpu: int = int(os.environ['TPU_LOAD_LIBRARY'])
+    if libtpu == 0:
+        tpu = True
+except:
+    print("TPU_LOAD_LIBRARY not set. Defaulting to CPU/GPU.")
     tpu = False
 
 name: str = str(sys.argv[1])
@@ -34,6 +51,13 @@ expansion_factor: int = int(sys.argv[3])
 batch_size: int = 64
 
 # TPU configuration
+
+# Note that you will need to set the following environment variables:
+# TPU_NAME=<current TPU name>
+# TPU_LOAD_LIBRARY=0
+
+# You may also need to remove the /tmp directory, which contains the libtpu_file that seems to prevent the TPU server from starting
+
 if tpu == True:
     print("===== Configuring TPU =====")
     resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
@@ -43,21 +67,40 @@ if tpu == True:
     tf.tpu.experimental.initialize_tpu_system(resolver)
     print(f"Tensorflow can access {len(tf.config.list_logical_devices('TPU'))} TPUs.")
     print("===== TPU Ready =====")
-    strategy = tf.distribute.experimental.TPUStrategy(resolver)
+    strategy = tf.distribute.TPUStrategy(resolver)
+
 
 
 # cloud data connection
 gcs_client = get_client()
 bucket = gcs_client.get_bucket("ek990")
 print("===== Data Connection Established =====")
-dataset = train_datastream(bucket, "sp-embed-tfrecords/*")  # note that shuffling is done within this function for performance reasons
+tfrecord_files = train_datastream(bucket, "sp-embed-tfrecords/*")  # note that shuffling is done within this function
 # split dataset
 print("Partitioning Validation Data...")
-val = dataset.take(int(1e5))
-val = val.map(parse_tf_record)
-train = dataset.skip(int(1e5)).take(int(5e5))
-train = train.map(parse_tf_record)
+# ensure full batches for training
+train_size = int(batch_size * 1000)
+val_size = int(batch_size * 100)
+steps_per_epoch = train_size // batch_size
+val_steps = val_size // batch_size
+
+train, val = tfrecord_files[:train_size], tfrecord_files[train_size:train_size+val_size]
+del tfrecord_files # save some memory
+
+train = tf.data.TFRecordDataset(
+    filenames=train, 
+    buffer_size=0, # 1MB 
+    num_parallel_reads=tf.data.experimental.AUTOTUNE).map(parse_tf_record)
+tf.print(train)
+
+val = tf.data.TFRecordDataset(
+    filenames=val, 
+    buffer_size=0, # 1MB
+    num_parallel_reads=tf.data.experimental.AUTOTUNE).map(parse_tf_record)
+tf.print(val)
+
 print("--- Data Ready ---")
+
 
 
 # training configuration
@@ -71,25 +114,37 @@ metrics = [
 tb_callback = keras.callbacks.TensorBoard(log_dir=f"gs://ek990/autoencoder_logs/{name}")
 early_stopping = keras.callbacks.EarlyStopping(monitor="mean_squared_error", min_delta=0.001, patience=20, restore_best_weights=True)
 
+
+
+# load model onto appropriate training device
 print(f"Configuring Sparse Autoencoder with encoding size {encoding_size} and expansion factor {expansion_factor}...")
 if tpu == True:
+    tf.print(strategy.scope())
     with strategy.scope():
         model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
         model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+        model.call(tf.random.normal((batch_size, encoding_size)))
+        tf.print(model.get_compile_config())
+        tf.print(model.summary())
 else:
     model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+    model.call(tf.random.normal((batch_size, encoding_size)))
+    tf.print(model.get_compile_config())
+    tf.print(model.summary())
 
 ############################################################################################################################################################
 ######   TRAINING AUTOENCODER   ######
 ############################################################################################################################################################
 
 history = model.fit(
-    x = train.batch(batch_size), 
+    x = train.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE).repeat(), 
     epochs = 1000,
-    validation_data = val.batch(batch_size),
+    steps_per_epoch = steps_per_epoch,
+    validation_data = val.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE).repeat(),
+    validation_steps = val_steps,
     callbacks = [tb_callback, early_stopping],
-    verbose = 2
+    verbose = 1
     )
 
 # save model
@@ -108,17 +163,23 @@ print("Generating Descriptive Statistics...")
 # send vis to bucket
 vis_path = f"gs://ek990/autoencoder_logs/{name}/Descriptive_Stats/"
 
+
+
 print("===== MSE =====")
 sns.lineplot(data=history.history['mean_squared_error'], label='Mean Squared Error')
 sns.lineplot(history.history['val_mean_squared_error'], label='Validation Mean Squared Error')
 plt.title("Mean Squared Error")
 plt.savefig(vis_path + "MSE.png")
 
+
+
 print("===== LOSS =====")
 sns.lineplot(data=history.history['loss'], label='Loss')
 sns.lineplot(history.history['val_loss'], label='Validation Loss')
 plt.title("Loss")
 plt.savefig(vis_path + "Loss.png")
+
+
 
 print("===== FEATURE WEIGHT DISTR =====")
 feat_weights = np.array(model.weights[1])
@@ -140,10 +201,13 @@ plt.xlabel('Aggregate Feature Weight')
 plt.ylabel('Frequency')
 plt.savefig(vis_path + "Aggregate_Feature_Weights.png")
 
+
+
 print("===== FEATURE OUTPUT DISTR =====")
 # load per-residue heme embeddings
 heme_embed_path = "./data/variant_embeddings/all_vars"
 heme_embeddings = [np.load(f"{heme_embed_path}/{f}").squeeze() for f in os.listdir(heme_embed_path)]
+random.shuffle(heme_embeddings) # randomize since we are looking at only some of the residue embeddings
 heme_embeddings = np.vstack(heme_embeddings)
 
 reconstructed_outputs, feature_outputs = model.predict_on_batch(heme_embeddings[1042:2042]) # arbitrary slice of 1000 per residue embeddings
@@ -153,6 +217,8 @@ plt.title('Distribution of feature_outputs')
 plt.xlabel('Feature Value')
 plt.ylabel('Frequency')
 plt.savefig(vis_path + "Feature_Outputs.png")
+
+
 
 print("===== WEIGHT VECTOR ORTHOGONALITY =====")
 def vector_angle(v1, v2):
@@ -200,3 +266,7 @@ plt.title('Distribution of Output Angles')
 plt.xlabel('Angle (degrees)')
 plt.ylabel('Frequency')
 plt.savefig(vis_path + "Output_Angles.png")
+
+
+print(f"Results saved to {vis_path}")
+print("===== DONE =====")

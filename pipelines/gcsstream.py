@@ -13,22 +13,21 @@ def get_client() -> storage.Client:
     print(f"Authenticated to project {project_id}")
     return storage_client
 
-def train_datastream(bucket, tfrecord_path_pattern) -> tf.data.TFRecordDataset:
+def train_datastream(bucket, tfrecord_path_pattern) -> list[str]:
 
-    """Configure TFRecords into a dataset for streaming from GCS"""
+    """Obtain filenames for training data from a GCS bucket"""
 
     print("Gathering TFRecords from GCS...")
-    filenames = bucket.list_blobs(match_glob=tfrecord_path_pattern)
+    filenames = bucket.list_blobs(match_glob=tfrecord_path_pattern, max_results=100000)
     filenames = [f"gs://{bucket.name}/{f.name}" for f in filenames]
     print(f"Found {len(filenames)} TFRecords.")
     print("Shuffling entries for training...")
     random.shuffle(filenames)
-    print("Creating dataset...")
-    dataset = tf.data.TFRecordDataset(filenames=filenames)
     print("--- Done ---")
 
-    return dataset
+    return filenames
 
+@tf.function
 def parse_tf_record(record) -> tf.Tensor:
 
     """Parse a TFRecord into a tensor"""

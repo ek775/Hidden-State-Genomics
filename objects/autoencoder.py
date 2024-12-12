@@ -9,7 +9,7 @@ class SparseAutoEncoder(tf.keras.Model):
         self.input_layer = tf.keras.layers.InputLayer(
             shape=(encoding_size,),
             name='input'
-            )
+        )
         self.encoder = tf.keras.layers.Dense(
             units=self.n_features,
             use_bias=False,
@@ -23,7 +23,7 @@ class SparseAutoEncoder(tf.keras.Model):
             use_bias=False, 
             activation='relu',
             name='decoder'
-            )
+        )
         self.last_features = None
 
     def call(self, x):
