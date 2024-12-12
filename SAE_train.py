@@ -108,7 +108,7 @@ print("--- Data Ready ---")
 
 
 # training configuration
-def compile_model() -> SparseAutoEncoder:
+def compile_model(jit:bool = "auto") -> SparseAutoEncoder:
     optimizer = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
     loss = keras.losses.MeanSquaredError(reduction="sum")
     metrics = [
@@ -117,7 +117,7 @@ def compile_model() -> SparseAutoEncoder:
     ]
 
     model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
-    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics, jit_compile=jit)
     model.call(tf.random.normal((batch_size, encoding_size)))
     tf.print(model.get_compile_config())
     tf.print(model.summary())
@@ -129,7 +129,7 @@ def compile_model() -> SparseAutoEncoder:
 print(f"Configuring Sparse Autoencoder with encoding size {encoding_size} and expansion factor {expansion_factor}...")
 if tpu == True:
     with strategy.scope():
-        model = compile_model()
+        model = compile_model(jit=True)
 else:
     model = compile_model()
 
