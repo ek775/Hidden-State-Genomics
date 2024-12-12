@@ -48,7 +48,7 @@ except:
 name: str = str(sys.argv[1])
 encoding_size: int = int(sys.argv[2])
 expansion_factor: int = int(sys.argv[3])
-batch_size: int = 64
+batch_size: int = 128
 
 # TPU configuration
 
@@ -81,8 +81,8 @@ tfrecord_files = train_datastream(bucket, "sp-embed-tfrecords/*")
 # split dataset
 print("Partitioning Validation Data...")
 # ensure full batches for training
-train_size = int(batch_size * 1000)
-val_size = int(batch_size * 100)
+train_size = int(batch_size * 2000)
+val_size = int(batch_size * 200)
 steps_per_epoch = train_size // batch_size
 val_steps = val_size // batch_size
 
@@ -147,7 +147,7 @@ history = model.fit(
     validation_data = val.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE).repeat(),
     validation_steps = val_steps,
     callbacks = [tb_callback, early_stopping],
-    verbose = 1
+    verbose = 2
     )
 
 # save model

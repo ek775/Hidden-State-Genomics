@@ -18,7 +18,7 @@ def train_datastream(bucket, tfrecord_path_pattern) -> list[str]:
     """Obtain filenames for training data from a GCS bucket"""
 
     print("Gathering TFRecords from GCS...")
-    filenames = bucket.list_blobs(match_glob=tfrecord_path_pattern, max_results=100000)
+    filenames = bucket.list_blobs(match_glob=tfrecord_path_pattern)
     filenames = [f"gs://{bucket.name}/{f.name}" for f in filenames]
     print(f"Found {len(filenames)} TFRecords.")
     print("Shuffling entries for training...")
