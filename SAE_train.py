@@ -92,7 +92,7 @@ del tfrecord_files # save some memory
 def make_dataset(filenames: list[str]) -> tf.data.Dataset:
     return tf.data.TFRecordDataset(
         filenames=filenames, 
-        buffer_size=0, # 1MB
+        buffer_size=0,
         num_parallel_reads=tf.data.experimental.AUTOTUNE).map(parse_tf_record)
 
 if tpu == True:
@@ -108,37 +108,37 @@ print("--- Data Ready ---")
 
 
 # training configuration
-optimizer = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
-loss = keras.losses.MeanSquaredError(reduction="sum")
-metrics = [
-    keras.metrics.MeanSquaredError(),
-    keras.metrics.Metric(name='placeholder') # placeholder for training, feature output requires a 2nd metric to appease keras
-]
+def compile_model() -> SparseAutoEncoder:
+    optimizer = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+    loss = keras.losses.MeanSquaredError(reduction="sum")
+    metrics = [
+        keras.metrics.MeanSquaredError(),
+        keras.metrics.Metric(name='placeholder') # placeholder for training, feature output requires a 2nd metric to appease keras
+    ]
 
-tb_callback = keras.callbacks.TensorBoard(log_dir=f"gs://ek990/autoencoder_logs/{name}")
-early_stopping = keras.callbacks.EarlyStopping(monitor="mean_squared_error", min_delta=0.001, patience=20, restore_best_weights=True)
-
-
-
-# load model onto appropriate training device
-print(f"Configuring Sparse Autoencoder with encoding size {encoding_size} and expansion factor {expansion_factor}...")
-if tpu == True:
-    with strategy.scope():
-        model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
-        model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-        model.call(tf.random.normal((batch_size, encoding_size)))
-        tf.print(model.get_compile_config())
-        tf.print(model.summary())
-else:
     model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
     model.call(tf.random.normal((batch_size, encoding_size)))
     tf.print(model.get_compile_config())
     tf.print(model.summary())
 
+    return model
+
+
+# load model onto appropriate training device
+print(f"Configuring Sparse Autoencoder with encoding size {encoding_size} and expansion factor {expansion_factor}...")
+if tpu == True:
+    with strategy.scope():
+        model = compile_model()
+else:
+    model = compile_model()
+
 ############################################################################################################################################################
 ######   TRAINING AUTOENCODER   ######
 ############################################################################################################################################################
+
+tb_callback = keras.callbacks.TensorBoard(log_dir=f"gs://ek990/autoencoder_logs/{name}")
+early_stopping = keras.callbacks.EarlyStopping(monitor="mean_squared_error", min_delta=0.001, patience=20, restore_best_weights=True)
 
 history = model.fit(
     x = train.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE).repeat(), 
