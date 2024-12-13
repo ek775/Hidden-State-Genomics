@@ -49,6 +49,8 @@ name: str = str(sys.argv[1])
 encoding_size: int = int(sys.argv[2])
 expansion_factor: int = int(sys.argv[3])
 batch_size: int = 128
+epochs: int = 100
+checkpoint_file_path: str = f"./autoencoder_models/{name}_partial.weights.h5"
 
 # TPU configuration
 
@@ -77,15 +79,20 @@ bucket = gcs_client.get_bucket("ek990")
 print("===== Data Connection Established =====")
 # get file names from bucket
 # note the file names are shuffled within the function
-tfrecord_files = train_datastream(bucket, "sp-embed-tfrecords/*")
+tfrecord_files, num_files = train_datastream(bucket, "sp-embed-tfrecords/*")
 # split dataset
 print("Partitioning Validation Data...")
 # ensure full batches for training
-train_size = int(batch_size * 2000)
-val_size = int(batch_size * 200)
-steps_per_epoch = train_size // batch_size
-val_steps = val_size // batch_size
+train_size: int = round(num_files * 0.8)
+val_size: int = round(num_files * 0.2)
 
+total_steps_train: int = train_size // batch_size
+total_steps_val: int = val_size // batch_size
+
+steps_per_epoch: int = total_steps_train // epochs
+val_steps: int = total_steps_val // epochs
+
+# list file paths
 train, val = tfrecord_files[:train_size], tfrecord_files[train_size:train_size+val_size]
 del tfrecord_files # save some memory
 
@@ -118,6 +125,12 @@ def compile_model(jit:bool = "auto") -> SparseAutoEncoder:
 
     model = SparseAutoEncoder(encoding_size=encoding_size, expansion_factor=expansion_factor, name=name)
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics, jit_compile=jit)
+    
+    # for resuming training
+    if os.path.exists(checkpoint_file_path):
+        model.load_weights(checkpoint_file_path)
+        print("Model weights loaded from GCS.")
+
     model.call(tf.random.normal((batch_size, encoding_size)))
     tf.print(model.get_compile_config())
     tf.print(model.summary())
@@ -138,21 +151,37 @@ else:
 ############################################################################################################################################################
 
 tb_callback = keras.callbacks.TensorBoard(log_dir=f"gs://ek990/autoencoder_logs/{name}")
-early_stopping = keras.callbacks.EarlyStopping(monitor="mean_squared_error", min_delta=0.001, patience=20, restore_best_weights=True)
 
+early_stopping = keras.callbacks.EarlyStopping(
+    monitor="mean_squared_error", 
+    min_delta=0.001, 
+    patience=10, # 10 epochs ~ 10% random sample of embeddings due to optimizations
+    restore_best_weights=True
+)
+
+checkpoint = keras.callbacks.ModelCheckpoint(
+    filepath=checkpoint_file_path, 
+    monitor="mean_squared_error", 
+    save_weights_only=True,
+    save_best_only=True
+)
+
+# train model
 history = model.fit(
     x = train.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE).repeat(), 
-    epochs = 1000,
+    epochs = epochs,
     steps_per_epoch = steps_per_epoch,
     validation_data = val.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE).repeat(),
     validation_steps = val_steps,
-    callbacks = [tb_callback, early_stopping],
-    verbose = 2
-    )
+    callbacks = [tb_callback, early_stopping, checkpoint],
+    verbose = 1
+)
 
 # save model
-model.save(f"gs://ek990/autoencoder_models/{name}.keras")
-model.save_weights(f"gs://ek990/autoencoder_models/{name}_weights.h5")
+model.save(f"./autoencoder_models/{name}.keras")
+model.save_weights(f"./autoencoder_models/{name}.weights.h5")
+bucket.blob(f"autoencoder_models/{name}.keras").upload_from_filename(f"./autoencoder_models/{name}.keras")
+bucket.blob(f"autoencoder_models/{name}.weights.h5").upload_from_filename(f"./autoencoder_models/{name}.weights.h5")
 print("Model saved to GCS.")
 print(model.summary())
 
@@ -164,7 +193,8 @@ print(model.summary())
 
 print("Generating Descriptive Statistics...")
 # send vis to bucket
-vis_path = f"gs://ek990/autoencoder_logs/{name}/Descriptive_Stats/"
+vis_path = f"./autoencoder_logs/{name}/Descriptive_Stats/"
+os.makedirs(vis_path, exist_ok=True)
 
 
 
@@ -173,6 +203,7 @@ sns.lineplot(data=history.history['mean_squared_error'], label='Mean Squared Err
 sns.lineplot(history.history['val_mean_squared_error'], label='Validation Mean Squared Error')
 plt.title("Mean Squared Error")
 plt.savefig(vis_path + "MSE.png")
+plt.close()
 
 
 
@@ -181,6 +212,7 @@ sns.lineplot(data=history.history['loss'], label='Loss')
 sns.lineplot(history.history['val_loss'], label='Validation Loss')
 plt.title("Loss")
 plt.savefig(vis_path + "Loss.png")
+plt.close()
 
 
 
@@ -197,12 +229,14 @@ plt.title('Distribution of Feature Weights')
 plt.xlabel('Feature Weight')
 plt.ylabel('Frequency')
 plt.savefig(vis_path + "Feature_Weights.png")
+plt.close()
 
 sns.histplot(agg_feat_weights, kde=True)
 plt.title('Distribution of Per-Neuron Aggregate Feature Weights')
 plt.xlabel('Aggregate Feature Weight')
 plt.ylabel('Frequency')
 plt.savefig(vis_path + "Aggregate_Feature_Weights.png")
+plt.close()
 
 
 
@@ -220,6 +254,7 @@ plt.title('Distribution of feature_outputs')
 plt.xlabel('Feature Value')
 plt.ylabel('Frequency')
 plt.savefig(vis_path + "Feature_Outputs.png")
+plt.close()
 
 
 
@@ -262,6 +297,7 @@ plt.title('Distribution of Input Angles')
 plt.xlabel('Angle (degrees)')
 plt.ylabel('Frequency')
 plt.savefig(vis_path + "Input_Angles.png")
+plt.close()
 
 # Plot histogram of output angles
 sns.histplot(output_angles, kde=True)
@@ -269,7 +305,12 @@ plt.title('Distribution of Output Angles')
 plt.xlabel('Angle (degrees)')
 plt.ylabel('Frequency')
 plt.savefig(vis_path + "Output_Angles.png")
+plt.close()
 
 
+# export to bucket
 print(f"Results saved to {vis_path}")
+print("Uploading to Google Cloud Storage...")
+for file in os.listdir(vis_path):
+    bucket.blob(f"{vis_path}{file}").upload_from_filename(f"{vis_path}{file}")
 print("===== DONE =====")

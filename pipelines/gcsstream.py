@@ -25,7 +25,7 @@ def train_datastream(bucket, tfrecord_path_pattern) -> list[str]:
     random.shuffle(filenames)
     print("--- Done ---")
 
-    return filenames
+    return filenames, len(filenames)
 
 @tf.function
 def parse_tf_record(record) -> tf.Tensor:
