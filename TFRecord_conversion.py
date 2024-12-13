@@ -17,7 +17,7 @@ data_loc = bucket.list_blobs(match_glob="sp-per-residue-embeddings/*")
 
 # read csv into memory
 print("Processing ESM-2 output into TFRecords...")
-for i, csv in enumerate(data_loc):
+for i, csv in enumerate(tqdm(data_loc)):
     if i < int(restart):
         continue
     # read csv into memory
