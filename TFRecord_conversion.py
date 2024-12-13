@@ -5,7 +5,9 @@ import tensorflow as tf
 from pipelines.gcsstream import get_client
 from io import StringIO
 from tqdm import tqdm
+import sys
 
+restart = sys.argv[1]
 # connect to gcs bucket
 gcs_client = get_client()
 
@@ -15,7 +17,9 @@ data_loc = bucket.list_blobs(match_glob="sp-per-residue-embeddings/*")
 
 # read csv into memory
 print("Processing ESM-2 output into TFRecords...")
-for csv in tqdm(data_loc):
+for i, csv in enumerate(data_loc):
+    if i < int(restart):
+        continue
     # read csv into memory
     csv_file = bucket.get_blob(csv.name)
     csv_file = csv_file.download_as_string()
