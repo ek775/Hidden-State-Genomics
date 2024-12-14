@@ -58,7 +58,7 @@ checkpoint_file_path: str = f"./autoencoder_models/{name}_partial.weights.h5"
 # TPU_NAME=<current TPU name>
 # TPU_LOAD_LIBRARY=0
 
-# You may also need to remove the /tmp directory, which contains the libtpu_file that seems to prevent the TPU server from starting
+# You may also need to remove the /tmp directory, which contains the libtpu_lockfile that seems to prevent the TPU server from starting
 
 if tpu == True:
     print("===== Configuring TPU =====")
@@ -117,7 +117,7 @@ print("--- Data Ready ---")
 # training configuration
 def compile_model(jit:bool = "auto") -> SparseAutoEncoder:
     optimizer = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
-    loss = keras.losses.MeanSquaredError(reduction="sum")
+    loss = keras.losses.MeanSquaredError(reduction="sum_over_batch_size")
     metrics = [
         keras.metrics.MeanSquaredError(),
         keras.metrics.Metric(name='placeholder') # placeholder for training, feature output requires a 2nd metric to appease keras
@@ -155,7 +155,7 @@ tb_callback = keras.callbacks.TensorBoard(log_dir=f"gs://ek990/autoencoder_logs/
 early_stopping = keras.callbacks.EarlyStopping(
     monitor="mean_squared_error", 
     min_delta=0.001, 
-    patience=10, # 10 epochs ~ 10% random sample of embeddings due to optimizations
+    patience=20, # 20 epochs ~ 20% random sample of embeddings due to optimizations
     restore_best_weights=True
 )
 
