@@ -1,0 +1,12 @@
+# Python Dependencies
+pytorch
+nnsight
+biopython
+numpy
+pandas
+tqdm
+matplotlib
+seaborn
+plotly
+scikit-learn
+umap-learn
