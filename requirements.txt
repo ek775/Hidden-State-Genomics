@@ -1,12 +1,13 @@
 # Python Dependencies
-pytorch
+torchvision
 nnsight
+transformers
 biopython
-numpy
+hgvs
 pandas
 tqdm
-matplotlib
 seaborn
 plotly
 scikit-learn
 umap-learn
+streamlit
