@@ -3,7 +3,7 @@ import unittest
 
 from hgvs.sequencevariant import SequenceVariant
 
-from variantmap import DNAVariant
+from HiddenStateGenomics.pipelines.variantmap import DNAVariant
 
 class TestDNAVariant(unittest.TestCase):
     @classmethod
