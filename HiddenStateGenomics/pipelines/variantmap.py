@@ -5,28 +5,61 @@ from hgvs.assemblymapper import AssemblyMapper
 from biocommons.seqrepo import SeqRepo
 from hgvs.sequencevariant import SequenceVariant
 
-class DNAVariant():
-    """Class for processing hgvs variant expressions to obtain raw sequences for reference and variant alleles"""
-    def __init__(self, hgvs_expression:str) -> None:
-        self.hgvs_expression:str = hgvs_expression
-        self.hgvs_ref: SequenceVariant = None
-        self.retrieve_refseq:str = ""
-        self.retrieve_variantseq:str = ""
+def clean_hgvs_expression(hgvs_expression:str) -> str:
 
-    def parse_hgvs(self) -> None:
-        parser = Parser()
-        self.hgvs_ref = parser.parse_hgvs_variant(self.hgvs_expression)
+    """
+    Given names and hgvs expressions in clinvar dataset include annotations that cause issues for hgvs parser.
     
+    This function removes these annotations from the hgvs expressions and generates corrected hgvs expressions.
+    """
+
+    pass
+
+
+
+class DNAVariant():
+
+    """
+    Class for processing hgvs variant expressions to obtain raw sequences for reference and variant alleles
+    """
+
+    def __init__(self, hgvs_expression:str) -> None:
+        # params
+        self.hgvs_expression:str = hgvs_expression
+        self.assembly:str = "GRCh37" # TODO: dynamically set assembly 
+
+        # hgvs tools
+        self.parser:Parser = Parser()
+        self.assembly_mapper:AssemblyMapper = AssemblyMapper(connect(), assembly_name=self.assembly, alt_aln_method='splign')
+        self.seq_repo:SeqRepo = SeqRepo("./genome_databases/2024-05-23") # TODO: dynamically set database
+
+        # the important stuff
+        self.hgvs_ref: SequenceVariant = self.parser.parse_hgvs_variant(self.hgvs_expression)        
+        self.ref_seq: str = ""
+        self.var_seq: str = ""
+    
+
+    def standardize_expression_type(self, expression_type:str = ["g","m","c","n","r","p"]):
+
+        """
+        Standardize hgvs types for proper mapping of refseqs and generation of variant sequences.
+
+        Different hgvs types utilize different coordinate systems and may use non-contiguous indices, 
+        making it difficult to properly modify refseqs to obtain variant sequences.
+        """
+
+        pass
+
+
     def retrieve_refseq(self, assembly:str) -> None:
+        """
+        Retrieve reference sequence from seqrepo.
+        """
+        var_ref = self.assembly_mapper.c_to_g(self.hgvs_ref) # TODO: remove in favor of standardized expression and loci
+        sequence_proxy = self.seq_repo[f"refseq:{var_ref.ac}"]
+        pass
 
-        # Connect to UTA and align variant to reference
-        hdp = connect()
-        variant_mapper = AssemblyMapper(hdp, assembly_name=assembly, alt_aln_method='splign')
-        var_ref = variant_mapper.c_to_g(self.hgvs_ref)
-
-        # Connect to local seqrepo to obtain reference sequence
-        seqrepo = SeqRepo("./src/genome_databases/2024-05-23") # TODO: dynamically set database by config
-        sequence_proxy = seqrepo[f"refseq:{var_ref.ac}"]
 
     def retrieve_variantseq(self) -> None:
         pass
+

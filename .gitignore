@@ -162,4 +162,4 @@ cython_debug/
 #.idea/
 
 # seqrepo download is too large to be included in the repository
-genome_databases/2024-05-23.dpqfdp2b/
+genome_databases/2024-05-23/

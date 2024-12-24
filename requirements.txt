@@ -20,4 +20,5 @@ streamlit
 
 # seqrepo --root-dir ./genome_databases pull 
 
-# additional options can be found in the seqrepo documentation
+# additional options can be found in the seqrepo documentation:
+# https://hgvs.readthedocs.io/en/stable/installation.html#installing-seqrepo-optional
