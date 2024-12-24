@@ -1,13 +1,24 @@
 # Python Dependencies
 torchvision
+torch
 nnsight
 transformers
 biopython
 hgvs
+biocommons.seqrepo
 pandas
+numpy
 tqdm
 seaborn
 plotly
 scikit-learn
 umap-learn
 streamlit
+
+# Genome databases are provided through biocommons.seqrepo and need to be downloaded separately
+# After installing the requirements, run the following command to download the genome databases
+
+# seqrepo --root-dir ./genome_databases pull 
+
+# additional options can be found in the seqrepo documentation:
+# https://hgvs.readthedocs.io/en/stable/installation.html#installing-seqrepo-optional
