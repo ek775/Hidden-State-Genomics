@@ -13,19 +13,22 @@ class DNAVariantProcessor():
     Class for processing hgvs variant expressions to obtain raw sequences for reference and variant alleles
     """
 
-    def __init__(self, assembly:str = "GRCh37") -> None:
+    def __init__(self, assembly:str = "GRCh37", seqrepo_path:str = "./genome_databases/2024-05-23") -> None:
         # hgvs tools
         self.parser:Parser = Parser()
-#        self.assembly_mapper:AssemblyMapper = AssemblyMapper(connect(), assembly_name=assembly, alt_aln_method='splign')
-        self.seq_repo:SeqRepo = SeqRepo("./genome_databases/2024-05-23") # TODO: dynamically set database 
+        self.assembly_mapper:AssemblyMapper = AssemblyMapper(connect(), assembly_name=assembly, alt_aln_method='splign')
+        self.seq_repo:SeqRepo = SeqRepo(seqrepo_path) # TODO: dynamically set database 
 
 
     def clean_hgvs(self, raw_hgvs_expression:str) -> str:
+
         """
-        Processes hgvs expressions with gene name annotations and removes them for machine readability.
+        Processes hgvs expressions with gene name and predicted protein change annotations and removes them for machine readability.
         """
+
         pattern = r"\([^)]*\)"
         clean_hgvs = re.sub(pattern, '', raw_hgvs_expression)
+
         return clean_hgvs.strip()
 
 
@@ -35,8 +38,14 @@ class DNAVariantProcessor():
         Uses parser to parse input hgvs_expression
         """
 
-        return self.parser.parse_hgvs_variant(hgvs_expression)    
-    
+        try:
+            return self.parser.parse_hgvs_variant(hgvs_expression)  
+         
+        except Exception as e: 
+            print(f"Invalid or Uncertain HGVS expression: {hgvs_expression}")
+            print(e)
+            return None
+        
 
     def standardize_expression_type(self, hgvs_ref:SequenceVariant, expression_type:str = ["g","m","c","n","r","p"]):
 
