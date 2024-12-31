@@ -109,8 +109,10 @@ class DNAVariantProcessor():
         varseq = ''
 
         # modify the refseq to obtain the variant sequence
+        # TODO: HGVS extracts locations from hgvs expressions without validation. Need to implement some sort of 
+        # coordinate system unification and position validation to reduce mapping errors.
         try:
-            assert ref == refseq[variant_start:variant_end]
+            assert ref == refseq[variant_start:variant_end+1]
             varseq = refseq[:variant_start] + var + refseq[variant_end:]
         except:
             varseq = None
