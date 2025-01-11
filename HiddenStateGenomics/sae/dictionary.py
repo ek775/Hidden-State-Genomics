@@ -52,13 +52,13 @@ class AutoEncoder(Dictionary, nn.Module):
         dec_weight = dec_weight / dec_weight.norm(dim=0, keepdim=True)
         self.decoder.weight = nn.Parameter(dec_weight)
 
-    def encode(self, x):
+    def encode(self, x) -> t.Tensor:
         return nn.ReLU()(self.encoder(x - self.bias))
 
-    def decode(self, f):
+    def decode(self, f) -> t.Tensor:
         return self.decoder(f) + self.bias
 
-    def forward(self, x, output_features=False, ghost_mask=None):
+    def forward(self, x, output_features=False, ghost_mask=None) -> t.Tensor:
         """
         Forward pass of an autoencoder.
         x : activations to be autoencoded
@@ -87,7 +87,7 @@ class AutoEncoder(Dictionary, nn.Module):
             else:
                 return x_hat, x_ghost
 
-    def from_pretrained(path, device=None):
+    def from_pretrained(path, device=None) -> "AutoEncoder":
         """
         Load a pretrained autoencoder from a file.
         """
@@ -110,13 +110,13 @@ class IdentityDict(Dictionary, nn.Module):
         self.activation_dim = activation_dim
         self.dict_size = activation_dim
 
-    def encode(self, x):
+    def encode(self, x) -> t.Tensor:
         return x
 
-    def decode(self, f):
+    def decode(self, f) -> t.Tensor:
         return f
 
-    def forward(self, x, output_features=False, ghost_mask=None):
+    def forward(self, x, output_features=False, ghost_mask=None) -> t.Tensor:
         if output_features:
             return x, x
         else:
