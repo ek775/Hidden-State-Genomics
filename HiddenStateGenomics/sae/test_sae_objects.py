@@ -55,7 +55,7 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
 
         # Compute mean embeddings per sequence
         mean_sequence_embeddings = torch.sum(attention_mask*embeddings, axis=-2)/torch.sum(attention_mask, axis=1)
-        print(mean_sequence_embeddings.shape)
+        self.assertEqual(mean_sequence_embeddings.shape, (2, 2560))
 
         
 class Test_Dictionary_Objects(unittest.TestCase):
