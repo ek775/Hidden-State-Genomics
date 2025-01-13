@@ -163,3 +163,6 @@ cython_debug/
 
 # seqrepo download is too large to be included in the repository
 genome_databases/2024-05-23/
+# clingen and clinvar datasets have similar issue
+genome_databases/erepo.tabbed.txt
+genome_databases/variant_summary.txt
