@@ -1,8 +1,14 @@
 from HiddenStateGenomics.sae.dictionary import Dictionary, AutoEncoder, IdentityDict
+from HiddenStateGenomics.sae.interleave import get_submodule, intervention_output
+
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 from transformers.models.esm.modeling_esm import EsmForMaskedLM
 from transformers.models.esm import EsmTokenizer
 import torch
+import nnsight
+from nnsight import NNsight
+
+from tqdm import tqdm
 import unittest
 
 
@@ -33,12 +39,12 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
 
         # Create a dummy dna sequence and tokenize it
         sequences = ["ATTCCGATTCCGATTCCG", "ATTTCTCTCTCTCTCTGAGATCGATCGATCGAT"]
-        tokens_ids = tokenizer.batch_encode_plus(sequences, return_tensors="pt", padding="max_length", max_length = max_length)["input_ids"]
+        token_ids = tokenizer.batch_encode_plus(sequences, return_tensors="pt", padding="max_length", max_length = max_length)["input_ids"]
 
         # Compute the embeddings
-        attention_mask = tokens_ids != tokenizer.pad_token_id
+        attention_mask = token_ids != tokenizer.pad_token_id
         torch_outs = model(
-            tokens_ids,
+            token_ids,
             attention_mask=attention_mask,
             encoder_attention_mask=attention_mask,
             output_hidden_states=True
@@ -56,6 +62,26 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
         # Compute mean embeddings per sequence
         mean_sequence_embeddings = torch.sum(attention_mask*embeddings, axis=-2)/torch.sum(attention_mask, axis=1)
         self.assertEqual(mean_sequence_embeddings.shape, (2, 2560))
+
+    def test_nnsight_interleave(self):
+
+        # load huggingface model and tokenizer
+        tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
+        model = AutoModelForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
+
+        max_length = tokenizer.model_max_length
+        token_ids = tokenizer.encode_plus("ATTCCGATTCCGATTCCG", return_tensors="pt", padding="max_length", max_length = max_length)["input_ids"]
+        mask = token_ids != tokenizer.pad_token_id
+
+        # test access to each layer of model
+        for i in tqdm(range(len(model.esm.encoder.layer))):
+            access = intervention_output(
+                model=model,
+                tokens=token_ids,
+                attention_mask=mask,
+                patch_layer=i,
+            )
+            self.assertEqual(len(access), 2)                
 
         
 class Test_Dictionary_Objects(unittest.TestCase):
