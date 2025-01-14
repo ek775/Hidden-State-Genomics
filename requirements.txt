@@ -1,3 +1,4 @@
+# Python == 3.12.8
 # Python Dependencies
 torchvision
 torch
@@ -14,6 +15,8 @@ plotly
 scikit-learn
 umap-learn
 streamlit
+google-cloud-bigquery
+typed-argument-parser
 
 # Genome databases are provided through biocommons.seqrepo and need to be downloaded separately
 # After installing the requirements, run the following command to download the genome databases
