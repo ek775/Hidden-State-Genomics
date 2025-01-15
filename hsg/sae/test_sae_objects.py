@@ -1,5 +1,5 @@
-from HiddenStateGenomics.sae.dictionary import Dictionary, AutoEncoder, IdentityDict
-from HiddenStateGenomics.sae.interleave import get_submodule, intervention_output
+from hsg.sae.dictionary import Dictionary, AutoEncoder, IdentityDict
+from hsg.sae.interleave import get_submodule, intervention_output
 
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 from transformers.models.esm.modeling_esm import EsmForMaskedLM

@@ -5,7 +5,7 @@ Extract hidden states from NT language model and store in datasets for SAE train
 import torch
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 import pandas as pd
-from HiddenStateGenomics.pipelines.variantmap import DNAVariantProcessor
+from hsg.pipelines.variantmap import DNAVariantProcessor
 from tqdm import tqdm
 
 def load_model(model_name: str):
@@ -93,6 +93,10 @@ def extract_hidden_states(
                 encoder_attention_mask=mask,
                 output_hidden_states=True
             )
+
+        for i, hidden_state in enumerate(output.hidden_states):
+            print(type(hidden_state))
+            break
 
     return None
 

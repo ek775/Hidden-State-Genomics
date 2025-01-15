@@ -5,7 +5,7 @@ from hgvs.sequencevariant import SequenceVariant
 import pandas as pd
 from tqdm import tqdm
 
-from HiddenStateGenomics.pipelines.variantmap import DNAVariantProcessor
+from hsg.pipelines.variantmap import DNAVariantProcessor
 
 class TestDNAVariant(unittest.TestCase):
 
