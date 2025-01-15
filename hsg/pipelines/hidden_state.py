@@ -14,8 +14,19 @@ def load_model(model_name: str):
     """
     model = AutoModelForMaskedLM.from_pretrained(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    # use gpu if available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    try:
+        model.to(device)
+    except torch.OutOfMemoryError:
+        print(f"Model is too large for current memory constraints on {device}.")
+        print("Attempting to use CPU instead...")
+        device = torch.device("cpu")
+        model.to(device)
     
-    return model, tokenizer
+    return model, tokenizer, device
 
 
 def find_variant_ids(filepath: str) -> list[str]:
@@ -37,7 +48,7 @@ def find_variant_ids(filepath: str) -> list[str]:
         raise ValueError("Could not find variant ID column in dataset")
 
 
-def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, variant_sequence: int) -> None:
+def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, variant_sequence: int) -> list[list]:
     """
     Package hidden states and metadata to be written to disk.
     """
@@ -62,7 +73,8 @@ def extract_hidden_states(
         CSV files for each layer of the model containing hidden states at a per-token level for use in training SAEs.
 
     """
-    model, tokenizer = load_model(model_name)
+    model, tokenizer, device = load_model(model_name)
+    print(f"Using device: {device}")
     variant_processor = DNAVariantProcessor()
     
     print("Loading Data...")
@@ -76,15 +88,25 @@ def extract_hidden_states(
         if variant_obj is None:
             continue
 
-        variant_sequence = variant_processor.retrieve_refseq(variant_obj)
+        variant_sequence = variant_processor.retrieve_refseq(variant_obj) # TODO: Change to retrieve variant sequence
 
         if variant_sequence is None:
             continue
         
         # tokenize sequence
-        tokenized_sequence = tokenizer.encode_plus(variant_sequence, return_tensors="pt", padding="max_length", max_length = max_length)["input_ids"]
-        max_length = tokenizer.model_max_length
+        tokenized_sequence = tokenizer.encode_plus(
+            variant_sequence, 
+            return_tensors="pt", 
+            padding="max_length", 
+            truncation=True,
+            max_length = tokenizer.model_max_length
+        )["input_ids"]
+        
         mask = tokenized_sequence != tokenizer.pad_token_id
+
+        # send data to device
+        tokenized_sequence = tokenized_sequence.to(device)
+        mask = mask.to(device)
 
         with torch.no_grad():
             output = model(
@@ -94,11 +116,13 @@ def extract_hidden_states(
                 output_hidden_states=True
             )
 
-        for i, hidden_state in enumerate(output.hidden_states):
-            print(type(hidden_state))
-            break
+        for i, layer_act in enumerate(output['hidden_states']):
+            # copy tensor to cpu
+            layer_act.cpu()
+            package_hidden_state_data(layer_act, variant_name, variant_sequence)
 
-    return None
+    print("Done!")
+
 
 if __name__ == "__main__":
     from tap import tapify
