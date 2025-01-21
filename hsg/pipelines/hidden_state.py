@@ -6,6 +6,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 import pandas as pd
 from hsg.pipelines.variantmap import DNAVariantProcessor
+from hgvs.sequencevariant import SequenceVariant
 from tqdm import tqdm
 
 def load_model(model_name: str):
@@ -38,21 +39,43 @@ def find_variant_ids(filepath: str) -> list[str]:
 
     if "#Variation" in columns:
         print("Extracting ClinGen variant IDs")
-        return data["#Variation"].tolist()
+        return set(data["#Variation"].tolist())
     
     elif "Name" in columns:
         print("Extracting ClinVar variant IDs")
-        return data["Name"].tolist()
+        return set(data["Name"].tolist())
     
     else:
         raise ValueError("Could not find variant ID column in dataset")
 
 
-def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, variant_sequence: int) -> list[list]:
+def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, variant_sequence: int) -> pd.DataFrame:
     """
     Package hidden states and metadata to be written to disk.
     """
-    pass
+    # convert to dataframe
+    activation_array = hidden_states.detach().numpy()
+    activations = pd.DataFrame(activation_array)
+
+    # align 6-mer tokens with hidden states
+    token_seq = ["<start>"]
+    token_seq.extend([variant_sequence[i:i+6] for i in range(0, len(variant_sequence), 6)])
+    token_seq.append("<end>")
+    token_seq = token_seq[:len(activations)]
+    # drop masked / padding tokens
+    activations.drop(activations.tail(len(activations)-len(token_seq)).index, axis=0, inplace=True)
+    # finalize the dataframe
+    activations["variant_sequence"] = token_seq
+    activations["variant_name"] = variant_name
+
+    return activations
+
+    # debug
+    print(activations.head())
+    print(activations.describe())
+    print(activations[-5:])
+    print(activations.shape)
+    exit()
 
 
 def extract_hidden_states(
@@ -82,13 +105,13 @@ def extract_hidden_states(
 
     print("--- Processing Variants ---")
     for variant_id in tqdm(variant_ids):
-        variant_name = variant_processor.clean_hgvs(variant_id)
-        variant_obj = variant_processor.parse_variant(variant_name, return_exceptions=False)
+        variant_name: str = variant_processor.clean_hgvs(variant_id)
+        variant_obj: SequenceVariant = variant_processor.parse_variant(variant_name, return_exceptions=False)
 
         if variant_obj is None:
             continue
 
-        variant_sequence = variant_processor.retrieve_refseq(variant_obj) # TODO: Change to retrieve variant sequence
+        variant_sequence: str = variant_processor.retrieve_refseq(variant_obj) # TODO: Change to retrieve variant sequence
 
         if variant_sequence is None:
             continue
@@ -118,8 +141,8 @@ def extract_hidden_states(
 
         for i, layer_act in enumerate(output['hidden_states']):
             # copy tensor to cpu
-            layer_act.cpu()
-            package_hidden_state_data(layer_act, variant_name, variant_sequence)
+            layer_act = layer_act.cpu()
+            dataframe = package_hidden_state_data(torch.squeeze(layer_act, 0), variant_name, variant_sequence)
 
     print("Done!")
 
