@@ -16,18 +16,28 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
 
     def test_tokenizer_load(self):
 
+        print("Testing Tokenizer Load")
+        print("======================")
         tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
         self.assertIsInstance(tokenizer, EsmTokenizer)
+        print("======================")
+        print("Tokenizer Load Passed")
     
 
     def test_model_load(self):
 
+        print("Testing Model Load")
+        print("==================")
         model = AutoModelForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
         self.assertIsInstance(model, EsmForMaskedLM)
+        print("==================")
+        print("Model Load Passed")
 
 
     def test_dummy_encode(self):
 
+        print("Testing Dummy Encoding")
+        print("======================")
         # Import the tokenizer and the model
         tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
         model = AutoModelForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
@@ -63,8 +73,14 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
         mean_sequence_embeddings = torch.sum(attention_mask*embeddings, axis=-2)/torch.sum(attention_mask, axis=1)
         self.assertEqual(mean_sequence_embeddings.shape, (2, 2560))
 
+        print("======================")
+        print("Dummy Encoding Passed")
+
+
     def test_nnsight_interleave(self):
 
+        print("Testing NNsight Interleave")
+        print("==========================")
         # load huggingface model and tokenizer
         tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
         model = AutoModelForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
@@ -81,14 +97,23 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
                 attention_mask=mask,
                 patch_layer=i,
             )
-            self.assertEqual(len(access), 2)                
+            self.assertEqual(len(access), 2)    
+
+        print("==========================")
+        print("NNsight Interleave Passed")            
 
         
 class Test_Dictionary_Objects(unittest.TestCase):
 
     def test_autoencoder_instance(self):
 
+        print("Testing AutoEncoder Initialization")
+        print("=================================")
+
         autoencoder = AutoEncoder(activation_dim=10, dict_size=10)
         self.assertIsInstance(autoencoder, AutoEncoder)
         self.assertEqual(autoencoder.activation_dim, 10)
         self.assertEqual(autoencoder.dict_size, 10)
+
+        print("=================================")
+        print("AutoEncoder Initialization Passed")
