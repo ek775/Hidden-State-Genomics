@@ -2,12 +2,17 @@
 Extract hidden states from NT language model and store in datasets for SAE training.
 """
 
+import os
 import torch
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 import pandas as pd
 from hsg.pipelines.variantmap import DNAVariantProcessor
 from hgvs.sequencevariant import SequenceVariant
 from tqdm import tqdm
+
+# load environment variables
+from dotenv import load_dotenv
+load_dotenv()
 
 def load_model(model_name: str):
     """
@@ -79,8 +84,8 @@ def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, va
 
 
 def extract_hidden_states(
-        model_name: str = "InstaDeepAI/nucleotide-transformer-2.5b-multi-species",
-        csv_data_path: str = "./genome_databases/variant_summary.txt",
+        model_name: str = os.environ["NT_MODEL"],
+        csv_data_path: str = os.environ["CLIN_VAR_CSV"],
     ) -> None:
 
     """

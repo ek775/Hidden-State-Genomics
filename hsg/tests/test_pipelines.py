@@ -1,5 +1,6 @@
 # test classes and functions in pipelines module
 import unittest
+import os
 
 from hgvs.sequencevariant import SequenceVariant
 import pandas as pd
@@ -7,11 +8,15 @@ from tqdm import tqdm
 
 from hsg.pipelines.variantmap import DNAVariantProcessor
 
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
 class TestDNAVariant(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-        self.clin_gen = pd.read_csv("./genome_databases/erepo.tabbed.txt", header="infer", sep="\t")
+        self.clin_gen = pd.read_csv(os.environ["CLIN_GEN_CSV"], header="infer", sep="\t")
         self.worker = DNAVariantProcessor()
 
 

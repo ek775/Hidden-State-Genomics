@@ -10,6 +10,11 @@ from nnsight import NNsight
 
 from tqdm import tqdm
 import unittest
+import os
+
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
 
 
 class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
@@ -18,7 +23,7 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
 
         print("Testing Tokenizer Load")
         print("======================")
-        tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
+        tokenizer = AutoTokenizer.from_pretrained(os.environ["NT_MODEL"])
         self.assertIsInstance(tokenizer, EsmTokenizer)
         print("======================")
         print("Tokenizer Load Passed")
@@ -28,7 +33,7 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
 
         print("Testing Model Load")
         print("==================")
-        model = AutoModelForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
+        model = AutoModelForMaskedLM.from_pretrained(os.environ["NT_MODEL"])
         self.assertIsInstance(model, EsmForMaskedLM)
         print("==================")
         print("Model Load Passed")
@@ -39,8 +44,8 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
         print("Testing Dummy Encoding")
         print("======================")
         # Import the tokenizer and the model
-        tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
-        model = AutoModelForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
+        tokenizer = AutoTokenizer.from_pretrained(os.environ["NT_MODEL"])
+        model = AutoModelForMaskedLM.from_pretrained(os.environ["NT_MODEL"])
 
         # Choose the length to which the input sequences are padded. By default, the 
         # model max length is chosen, but feel free to decrease it as the time taken to 
@@ -64,14 +69,15 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
         embeddings = torch_outs['hidden_states'][-1].detach().numpy()
 
         # Check that the embeddings have the correct shape
-        self.assertEqual(embeddings.shape, (2, 1000, 2560))
+        # Note that 2.5b model has 2560 for neuron width
+        self.assertEqual(embeddings.shape, (2, 1000, 1280))
 
         # Add embed dimension axis
         attention_mask = torch.unsqueeze(attention_mask, dim=-1)
 
         # Compute mean embeddings per sequence
         mean_sequence_embeddings = torch.sum(attention_mask*embeddings, axis=-2)/torch.sum(attention_mask, axis=1)
-        self.assertEqual(mean_sequence_embeddings.shape, (2, 2560))
+        self.assertEqual(mean_sequence_embeddings.shape, (2, 1280)) # note that 2.5b model has 2560 for neuron width
 
         print("======================")
         print("Dummy Encoding Passed")
@@ -82,8 +88,8 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
         print("Testing NNsight Interleave")
         print("==========================")
         # load huggingface model and tokenizer
-        tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
-        model = AutoModelForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
+        tokenizer = AutoTokenizer.from_pretrained(os.environ["NT_MODEL"])
+        model = AutoModelForMaskedLM.from_pretrained(os.environ["NT_MODEL"])
 
         max_length = tokenizer.model_max_length
         token_ids = tokenizer.encode_plus("ATTCCGATTCCGATTCCG", return_tensors="pt", padding="max_length", max_length = max_length)["input_ids"]
