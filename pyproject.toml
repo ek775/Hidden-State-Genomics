@@ -27,6 +27,7 @@ dependencies = [
     "streamlit==1.41.1",
     "google-cloud-bigquery==3.27.0",
     "typed-argument-parser==1.10.1"
+    "pytest-env==1.1.5"
 ]
 
 [build-system]
@@ -35,3 +36,5 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["hsg"]
+
+[tool.pytest_env]

@@ -16,7 +16,10 @@ class TestDNAVariant(unittest.TestCase):
 
 
     def test_parse_hgvs(self):
-        
+
+        print("Testing HGVS Parsing")
+        print("====================")
+
         invalid_expressions = 0
 
         for var in tqdm(self.clin_gen["#Variation"]):
@@ -35,9 +38,13 @@ class TestDNAVariant(unittest.TestCase):
         print(f"Unable to process {invalid_expressions} out of {len(self.clin_gen)}")
         print("""This may be due to invalid or uncertain HGVS expressions. See https://hgvs-nomenclature.org/stable/recommendations/summary/ for proper syntax. \n
               Note that the hgvs package does not currently support all HGVS expression types.""")
+        print("====================")
 
 
     def test_retrieve_refseq(self):
+
+        print("Testing RefSeq Retrieval")
+        print("========================")
 
         for var in tqdm(self.clin_gen["#Variation"]):
 
@@ -52,9 +59,15 @@ class TestDNAVariant(unittest.TestCase):
             else:
                 refseq = self.worker.retrieve_refseq(var_obj)
                 self.assertIsInstance(refseq, str)
+        
+        print("========================")
+        print("RefSeq Retrieval Passed")
 
     
     def test_retrieve_variantseq(self):
+
+        print("Testing Variant Sequence Retrieval")
+        print("===================================")
 
         bad_mapping = 0
 
@@ -80,6 +93,7 @@ class TestDNAVariant(unittest.TestCase):
                 self.assertIsInstance(varseq, str)
 
         print(f"Unable to map {bad_mapping} out of {len(self.clin_gen)}")
+        print("===================================")
 
 
 # making unittest run from command line
