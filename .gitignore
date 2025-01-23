@@ -165,4 +165,5 @@ cython_debug/
 genome_databases/2024-05-23/
 # clingen and clinvar datasets have similar issue
 genome_databases/erepo.tabbed.txt
+enome_databases/erepo.tabbed.small.txt
 genome_databases/variant_summary.txt
