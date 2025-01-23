@@ -86,6 +86,7 @@ def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, va
 def extract_hidden_states(
         model_name: str = os.environ["NT_MODEL"],
         csv_data_path: str = os.environ["CLIN_VAR_CSV"],
+        output_dir: str = os.environ["GCLOUD_BUCKET"],
     ) -> None:
 
     """
@@ -146,8 +147,15 @@ def extract_hidden_states(
 
         for i, layer_act in enumerate(output['hidden_states']):
             # copy tensor to cpu
-            layer_act = layer_act.cpu()
-            dataframe = package_hidden_state_data(torch.squeeze(layer_act, 0), variant_name, variant_sequence)
+            layer_act: torch.Tensor = layer_act.cpu()
+            # process data
+            dataframe: pd.DataFrame = package_hidden_state_data(torch.squeeze(layer_act, 0), variant_name, variant_sequence)
+            # write file to GCS bucket
+            layer_id: str = f"{model.esm.encoder.layer[i].__class__.__name__}[{i}]"
+            layer_path: str = f"{output_dir}/{layer_id}/"
+            # TODO: convert dataframe to spark dataframe for writing to GCS,
+            #       repartition once full dataset written to shuffle data
+
 
     print("Done!")
 
