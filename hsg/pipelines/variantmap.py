@@ -45,7 +45,9 @@ class DNAVariantProcessor():
         """
 
         try:
-            return self.parser.parse(hgvs_expression)  
+            parsed_variant = self.parser.parse(hgvs_expression)
+            #print(f"Parsed HGVS Expression: {parsed_variant}")  # Print the parsed result
+            return parsed_variant
          
         except Exception as e: 
             # sometimes we want information, sometimes we just want to move on

@@ -8,7 +8,7 @@ authors = [
 ]
 license = { text = "CC0-1.0" }
 #I was having issues installing some dependencies in a more recent version of python. -sob
-requires-python = "==3.12"
+requires-python = "==3.12.8"
 
 dependencies = [
     "torchvision==0.20.1",
