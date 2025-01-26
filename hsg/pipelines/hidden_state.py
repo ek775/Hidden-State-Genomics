@@ -83,6 +83,9 @@ def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, va
     exit()
 
 
+def data_to_spark(dataframe: pd.DataFrame, output_dir: str) -> None:
+
+
 def extract_hidden_states(
         model_name: str = os.environ["NT_MODEL"],
         csv_data_path: str = os.environ["CLIN_VAR_CSV"],
