@@ -9,11 +9,23 @@ import pandas as pd
 from hsg.pipelines.variantmap import DNAVariantProcessor
 from hgvs.sequencevariant import SequenceVariant
 from tqdm import tqdm
+import csv
+import pyspark
+
+# for debugging and optimization
+import time
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler())
 
 # load environment variables
 from dotenv import load_dotenv
 load_dotenv()
 
+
+### core functions ###
 def load_model(model_name: str):
     """
     Returns pretrained model and associated tokenizer for extracting hidden states.
@@ -83,9 +95,34 @@ def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, va
     exit()
 
 
-def data_to_spark(dataframe: pd.DataFrame, output_dir: str) -> None:
+def create_dataset(dataframe: pd.DataFrame, address: str) -> None:
+    """
+    Create a new dataset in GCS bucket.
+    """
+    start = time.perf_counter()
+
+    dataframe.to_csv(address, index=False)
+
+    stop = time.perf_counter()
+    print(f"Time to write file: {stop - start}")
 
 
+def extend_dataset(dataframe: pd.DataFrame, address: str) -> None:
+    """
+    Append new data to existing dataset.
+    """
+    start = time.perf_counter()
+
+    rows = dataframe.to_dict("records")
+    with open(address, "a") as file:
+        writer = csv.DictWriter(file, fieldnames=dataframe.columns)
+        writer.writerows(rows)
+
+    stop = time.perf_counter()
+    print(f"Time to write file: {stop - start}")
+
+
+### main function ###
 def extract_hidden_states(
         model_name: str = os.environ["NT_MODEL"],
         csv_data_path: str = os.environ["CLIN_VAR_CSV"],
@@ -93,13 +130,13 @@ def extract_hidden_states(
     ) -> None:
 
     """
-    Extracts hidden states from the given language model from hugging face, by default nucleotide transformer 2.5b.
-
-    TODO: Fix variant mapping -- using refseq data for now to develop/debug pipeline.
+    Extracts hidden states from the given language model from hugging face. Defaults are taken
+    from the .env file as environment variables.
 
     Args:
         model_name (str): Name of the pretrained model.
         csv_data_path (str): Path to the csv file containing the variant data.
+        output_dir (str): Path to the GCS bucket where the hidden states will be stored.
     
     Returns:
         CSV files for each layer of the model containing hidden states at a per-token level for use in training SAEs.
@@ -112,17 +149,24 @@ def extract_hidden_states(
     print("Loading Data...")
     variant_ids: list[str] = find_variant_ids(csv_data_path)
 
-    print("--- Processing Variants ---")
+    print("--- Processing Sequences ---")
     for variant_id in tqdm(variant_ids):
         variant_name: str = variant_processor.clean_hgvs(variant_id)
         variant_obj: SequenceVariant = variant_processor.parse_variant(variant_name, return_exceptions=False)
 
+        # handle wonky variants and accessions
         if variant_obj is None:
+            print(f"Could not parse variant: {variant_name}")
             continue
 
-        variant_sequence: str = variant_processor.retrieve_refseq(variant_obj) # TODO: Change to retrieve variant sequence
+        try:
+            variant_sequence: str = variant_processor.retrieve_refseq(variant_obj)
+        except KeyError:
+            print(f"Could not find refseq for variant: {variant_name}")
+            continue
 
         if variant_sequence is None:
+            print(f"Could not find refseq for variant: {variant_name}")
             continue
         
         # tokenize sequence
@@ -140,6 +184,7 @@ def extract_hidden_states(
         tokenized_sequence = tokenized_sequence.to(device)
         mask = mask.to(device)
 
+        # extract hidden states
         with torch.no_grad():
             output = model(
                 tokenized_sequence,
@@ -148,17 +193,23 @@ def extract_hidden_states(
                 output_hidden_states=True
             )
 
+        # store data in bucket for SAE training
         for i, layer_act in enumerate(output['hidden_states']):
             # copy tensor to cpu
             layer_act: torch.Tensor = layer_act.cpu()
             # process data
             dataframe: pd.DataFrame = package_hidden_state_data(torch.squeeze(layer_act, 0), variant_name, variant_sequence)
             # write file to GCS bucket
-            layer_id: str = f"{model.esm.encoder.layer[i].__class__.__name__}[{i}]"
-            layer_path: str = f"{output_dir}/{layer_id}/"
-            # TODO: convert dataframe to spark dataframe for writing to GCS,
-            #       repartition once full dataset written to shuffle data
+            if i in range(len(model.esm.encoder.layer)):
+                layer_id: str = f"{model.esm.encoder.layer[i].__class__.__name__}[{i}]"
+            else:
+                layer_id: str = f"MLP_out[{i}]"
+            layer_path: str = f"{output_dir}/{layer_id}.csv"
 
+            if not os.path.exists(layer_path):
+                create_dataset(dataframe, layer_path)
+            else:
+                extend_dataset(dataframe, layer_path)
 
     print("Done!")
 
