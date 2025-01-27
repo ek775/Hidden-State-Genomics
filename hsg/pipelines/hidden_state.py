@@ -130,8 +130,10 @@ def get_unique_refseqs(csv_data_path, variant_processor: DNAVariantProcessor) ->
 
     if os.path.exists(cache_location):
         print(f"Loading RefSeq Accessions from Cache: {cache_location}")
+        unique_refseqs = []
         with open(cache_location, "r") as file:
-            unique_refseqs = file.readlines()
+            for line in file:
+                unique_refseqs.append(line.strip())
         return unique_refseqs
     
     else:
