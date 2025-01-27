@@ -5,6 +5,11 @@ from hgvs.assemblymapper import AssemblyMapper
 from biocommons.seqrepo import SeqRepo
 from hgvs.sequencevariant import SequenceVariant
 import re
+import os
+
+# load environment variables
+from dotenv import load_dotenv
+load_dotenv()
 
 
 class DNAVariantProcessor():
@@ -13,7 +18,7 @@ class DNAVariantProcessor():
     Class for processing hgvs variant expressions to obtain raw sequences for reference and variant alleles
     """
 
-    def __init__(self, assembly:str = "GRCh37", seqrepo_path:str = "./genome_databases/2024-05-23") -> None:
+    def __init__(self, assembly:str = "GRCh37", seqrepo_path:str = os.environ["SEQREPO_PATH"]) -> None:
         # hgvs tools
         self.parser:Parser = Parser()
         self.assembly_mapper:AssemblyMapper = AssemblyMapper(connect(), assembly_name=assembly, alt_aln_method='splign')

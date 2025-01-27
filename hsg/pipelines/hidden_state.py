@@ -122,6 +122,37 @@ def extend_dataset(dataframe: pd.DataFrame, address: str) -> None:
     print(f"Time to write file: {stop - start}")
 
 
+def get_unique_refseqs(csv_data_path, variant_processor: DNAVariantProcessor) -> list[str]:
+    """
+    Extract unique refseq accessions from variant ids.
+    """
+    cache_location = os.environ["REFSEQ_CACHE"]
+
+    if os.path.exists(cache_location):
+        print(f"Loading RefSeq Accessions from Cache: {cache_location}")
+        with open(cache_location, "r") as file:
+            unique_refseqs = file.readlines()
+        return unique_refseqs
+    
+    else:
+        print("No RefSeq Cache Found -> Extracting RefSeq Accessions from Variant IDs")
+        variant_ids: set[str] = find_variant_ids(filepath=csv_data_path)
+    
+        print(f"Finding Unique RefSeq Accessions...")
+        unique_refseqs = []
+        for id in tqdm(variant_ids):
+            variant_name: str = variant_processor.clean_hgvs(id)
+            variant_obj: SequenceVariant = variant_processor.parse_variant(variant_name, return_exceptions=False)
+            if variant_obj is not None:
+                unique_refseqs.append(variant_obj.ac)
+            else:
+                continue
+        unique_refseqs = set(unique_refseqs)
+        print(f"Found Unique RefSeq Accessions: {len(unique_refseqs)}")
+
+        return unique_refseqs
+
+
 ### main function ###
 def extract_hidden_states(
         model_name: str = os.environ["NT_MODEL"],
@@ -143,6 +174,7 @@ def extract_hidden_states(
         CSV files for each layer of the model containing hidden states at a per-token level for use in training SAEs.
 
     """
+    # load model
     model, tokenizer, device = load_model(model_name)
 
     print("=============================================================")
@@ -151,24 +183,12 @@ def extract_hidden_states(
     print(f"Writing Embeddings to: {output_dir}")
     print("=============================================================")
 
+    # hgvs utilities
     variant_processor = DNAVariantProcessor()
     seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
     
-    print("Loading Data...")
-    variant_ids: set[str] = find_variant_ids(csv_data_path)
-
-    print(f"Finding Unique RefSeq Accessions...")
-    unique_refseqs = []
-    for id in tqdm(variant_ids):
-        variant_name: str = variant_processor.clean_hgvs(id)
-        variant_obj: SequenceVariant = variant_processor.parse_variant(variant_name, return_exceptions=False)
-        if variant_obj is not None:
-            unique_refseqs.append(variant_obj.ac)
-        else:
-            continue
-    unique_refseqs = set(unique_refseqs)
-    print(f"Found Unique RefSeq Accessions: {len(unique_refseqs)}")
-    print("\n")
+    # find refseq loci from cache or from variant dataset
+    unique_refseqs = get_unique_refseqs(csv_data_path, variant_processor)
 
     print("--- Processing Sequences ---")
 
@@ -219,7 +239,7 @@ def extract_hidden_states(
             # copy tensor to cpu
             layer_act: torch.Tensor = layer_act.cpu()
             # process data
-            dataframe: pd.DataFrame = package_hidden_state_data(torch.squeeze(layer_act, 0), variant_name, variant_sequence)
+            dataframe: pd.DataFrame = package_hidden_state_data(torch.squeeze(layer_act, 0), accession, variant_sequence)
             # merge with batch
             if count == 0:
                 batch.append([dataframe])
