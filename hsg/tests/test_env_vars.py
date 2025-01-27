@@ -12,6 +12,8 @@ class Test_EnvVarsSet(unittest.TestCase):
         self.assertIsNotNone(os.getenv('CLIN_GEN_CSV'))
         self.assertIsNotNone(os.getenv('CLIN_VAR_CSV'))
         self.assertIsNotNone(os.getenv('NT_MODEL'))
+        self.assertIsNotNone(os.getenv('GCLOUD_BUCKET'))
+        self.assertIsNotNone(os.getenv('SEQREPO_PATH'))
 
 if __name__ == '__main__':
     unittest.main()
