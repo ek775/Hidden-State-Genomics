@@ -150,6 +150,11 @@ def get_unique_refseqs(csv_data_path, variant_processor: DNAVariantProcessor) ->
         unique_refseqs = set(unique_refseqs)
         print(f"Found Unique RefSeq Accessions: {len(unique_refseqs)}")
 
+        # cache refseq loci for future use
+        with open(cache_location, "w") as file:
+            for accession in unique_refseqs:
+                file.write(f"{accession}\n")
+
         return unique_refseqs
 
 
