@@ -8,9 +8,9 @@ from transformers import AutoTokenizer, AutoModelForMaskedLM
 import pandas as pd
 from hsg.pipelines.variantmap import DNAVariantProcessor
 from hgvs.sequencevariant import SequenceVariant
+from biocommons.seqrepo import SeqRepo
 from tqdm import tqdm
 import csv
-import pyspark
 
 # for debugging and optimization
 import time
@@ -127,6 +127,7 @@ def extract_hidden_states(
         model_name: str = os.environ["NT_MODEL"],
         csv_data_path: str = os.environ["CLIN_VAR_CSV"],
         output_dir: str = os.environ["GCLOUD_BUCKET"],
+        batch_size: int = 100
     ) -> None:
 
     """
@@ -143,30 +144,47 @@ def extract_hidden_states(
 
     """
     model, tokenizer, device = load_model(model_name)
+
+    print("=============================================================")
+    print(f"Extracting hidden states from model: {model_name}")
     print(f"Using device: {device}")
+    print(f"Writing Embeddings to: {output_dir}")
+    print("=============================================================")
+
     variant_processor = DNAVariantProcessor()
+    seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
     
     print("Loading Data...")
-    variant_ids: list[str] = find_variant_ids(csv_data_path)
+    variant_ids: set[str] = find_variant_ids(csv_data_path)
+
+    print(f"Finding Unique RefSeq Accessions...")
+    unique_refseqs = []
+    for id in tqdm(variant_ids):
+        variant_name: str = variant_processor.clean_hgvs(id)
+        variant_obj: SequenceVariant = variant_processor.parse_variant(variant_name, return_exceptions=False)
+        if variant_obj is not None:
+            unique_refseqs.append(variant_obj.ac)
+        else:
+            continue
+    unique_refseqs = set(unique_refseqs)
+    print(f"Found Unique RefSeq Accessions: {len(unique_refseqs)}")
+    print("\n")
 
     print("--- Processing Sequences ---")
-    for variant_id in tqdm(variant_ids):
-        variant_name: str = variant_processor.clean_hgvs(variant_id)
-        variant_obj: SequenceVariant = variant_processor.parse_variant(variant_name, return_exceptions=False)
 
-        # handle wonky variants and accessions
-        if variant_obj is None:
-            print(f"Could not parse variant: {variant_name}")
-            continue
+    # write to disk / bucket in batches
+    count = 0
+    batch: list[list[pd.DataFrame]] = []
+    total_processed_accessions = 0
 
+    for accession in tqdm(unique_refseqs):
+
+        variant_sequence = ""
         try:
-            variant_sequence: str = variant_processor.retrieve_refseq(variant_obj)
+            seq_proxy = seqrepo[f"refseq:{accession}"]
+            variant_sequence = seq_proxy.__str__()
         except KeyError:
-            print(f"Could not find refseq for variant: {variant_name}")
-            continue
-
-        if variant_sequence is None:
-            print(f"Could not find refseq for variant: {variant_name}")
+            print(f"Could not find refseq for accession: {accession}")
             continue
         
         # tokenize sequence
@@ -178,6 +196,7 @@ def extract_hidden_states(
             max_length = tokenizer.model_max_length
         )["input_ids"]
         
+        # mask padding tokens
         mask = tokenized_sequence != tokenizer.pad_token_id
 
         # send data to device
@@ -193,27 +212,56 @@ def extract_hidden_states(
                 output_hidden_states=True
             )
 
-        # store data in bucket for SAE training
+        total_processed_accessions += 1 # keep track of how many loci we've embedded
+
+        # stage embeddings as batches in memory
         for i, layer_act in enumerate(output['hidden_states']):
             # copy tensor to cpu
             layer_act: torch.Tensor = layer_act.cpu()
             # process data
             dataframe: pd.DataFrame = package_hidden_state_data(torch.squeeze(layer_act, 0), variant_name, variant_sequence)
-            # write file to GCS bucket
-            if i in range(len(model.esm.encoder.layer)):
-                layer_id: str = f"{model.esm.encoder.layer[i].__class__.__name__}[{i}]"
+            # merge with batch
+            if count == 0:
+                batch.append([dataframe])
             else:
-                layer_id: str = f"MLP_out[{i}]"
-            layer_path: str = f"{output_dir}/{layer_id}.csv"
+                batch[i].append(dataframe)
 
-            if not os.path.exists(layer_path):
-                create_dataset(dataframe, layer_path)
-            else:
-                extend_dataset(dataframe, layer_path)
+        # flush staged embeddings to disk
+        if count == batch_size:
+            for i, df_list in enumerate(batch):
+                # get file labels
+                if i in range(len(model.esm.encoder.layer)):
+                    layer_id: str = f"{model.esm.encoder.layer[i].__class__.__name__}[{i}]"
+                else:
+                    layer_id: str = f"MLP_out[{i}]"
 
-    print("Done!")
+                layer_path: str = f"{output_dir}/{layer_id}.csv"
+
+                # merge dataframes
+                dataframe = pd.concat(df_list, axis=0, ignore_index=True)
+
+                # flush to disk
+                if not os.path.exists(layer_path):
+                    create_dataset(dataframe, layer_path)
+                else:
+                    extend_dataset(dataframe, layer_path)
+
+            # reset count, batch
+            batch = []
+            count = 0
+            exit() # debug
+
+        else:
+            count += 1
+            continue
+
+    print("=============================================================")
+    print(f"Embeddings from {model_name} extracted successfully.")
+    print(f"Total of [{total_processed_accessions}] refseq loci processed.")
+    print("=============================================================")
 
 
+# run module as main with tap cmd-line framework
 if __name__ == "__main__":
     from tap import tapify
     tapify(extract_hidden_states)
