@@ -3,6 +3,8 @@ Extract hidden states from NT language model and store in datasets for SAE train
 """
 
 import os
+#import sys
+from google.cloud import storage
 import torch
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 import pandas as pd
@@ -12,13 +14,14 @@ from biocommons.seqrepo import SeqRepo
 from tqdm import tqdm
 import csv
 
+from multiprocessing import Pool, cpu_count
+
 # for debugging and optimization
 import time
 import logging
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logger.addHandler(logging.StreamHandler())
+#logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+#logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 
 # load environment variables
 from dotenv import load_dotenv
@@ -97,11 +100,15 @@ def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, va
 
 def create_dataset(dataframe: pd.DataFrame, address: str) -> None:
     """
-    Create a new dataset in GCS bucket.
+    Create a new dataset.
     """
     start = time.perf_counter()
 
-    dataframe.to_csv(address, index=False)
+    # if writing to bucket, handle rejection from too many simultaneous requests
+    try:
+        dataframe.to_csv(address, index=False)
+    except Exception as e:
+        return e
 
     stop = time.perf_counter()
     print(f"Time to write file: {stop - start}")
@@ -113,10 +120,11 @@ def extend_dataset(dataframe: pd.DataFrame, address: str) -> None:
     """
     start = time.perf_counter()
 
-    rows = dataframe.to_dict("records")
-    with open(address, "a") as file:
-        writer = csv.DictWriter(file, fieldnames=dataframe.columns)
-        writer.writerows(rows)
+    # if writing to bucket, handle rejection from too many simultaneous requests
+    try:
+        dataframe.to_csv(address, mode="a", header=False, index=False)
+    except Exception as e:
+        return e
 
     stop = time.perf_counter()
     print(f"Time to write file: {stop - start}")
@@ -160,12 +168,31 @@ def get_unique_refseqs(csv_data_path, variant_processor: DNAVariantProcessor) ->
         return unique_refseqs
 
 
+def gcs_or_local(address: str) -> str:
+    """
+    Check if address is a GCS bucket path or local path.
+    """
+    if address.startswith("gs://"):
+        return "gcs"
+    else:
+        return "local"
+
+def gcs_file_exists(address: str) -> bool:
+    """
+    Check if file exists in GCS bucket.
+    """
+    storage_client = storage.Client()
+    stats = storage.Blob.from_string(address).exists(storage_client)
+    return stats
+
+
 ### main function ###
 def extract_hidden_states(
         model_name: str = os.environ["NT_MODEL"],
         csv_data_path: str = os.environ["CLIN_VAR_CSV"],
         output_dir: str = os.environ["GCLOUD_BUCKET"],
-        batch_size: int = 100
+        batch_size: int = 100,
+        num_workers: int = (cpu_count()-1),
     ) -> None:
 
     """
@@ -176,6 +203,8 @@ def extract_hidden_states(
         model_name (str): Name of the pretrained model.
         csv_data_path (str): Path to the csv file containing the variant data.
         output_dir (str): Path to the GCS bucket where the hidden states will be stored.
+        batch_size (int): Number of loci to process in a single batch.
+        num_workers (int): Number of parallel processes to use for writing to disk.
     
     Returns:
         CSV files for each layer of the model containing hidden states at a per-token level for use in training SAEs.
@@ -188,6 +217,9 @@ def extract_hidden_states(
     print(f"Extracting hidden states from model: {model_name}")
     print(f"Using device: {device}")
     print(f"Writing Embeddings to: {output_dir}")
+    print("--- Parameters ---")
+    print(f"Batch Size: {batch_size}")
+    print(f"Number of Workers: {num_workers}")
     print("=============================================================")
 
     # hgvs utilities
@@ -204,7 +236,7 @@ def extract_hidden_states(
     batch: list[list[pd.DataFrame]] = []
     total_processed_accessions = 0
 
-    for accession in tqdm(unique_refseqs):
+    for n, accession in tqdm(enumerate(unique_refseqs)):
 
         variant_sequence = ""
         try:
@@ -254,7 +286,13 @@ def extract_hidden_states(
                 batch[i].append(dataframe)
 
         # flush staged embeddings to disk
-        if count == batch_size:
+        if count == batch_size or n == (len(unique_refseqs)-1):
+
+            # enable multiprocessing to alleviate I/O bottleneck
+            start = time.perf_counter()
+            process_pool = Pool(processes=num_workers)
+            results = []
+
             for i, df_list in enumerate(batch):
                 # get file labels
                 if i in range(len(model.esm.encoder.layer)):
@@ -267,11 +305,34 @@ def extract_hidden_states(
                 # merge dataframes
                 dataframe = pd.concat(df_list, axis=0, ignore_index=True)
 
-                # flush to disk
-                if not os.path.exists(layer_path):
-                    create_dataset(dataframe, layer_path)
+                # check local output or gcs output, apply appropriate utils to create vs extend dataset
+                file_exists = False
+                if gcs_or_local(output_dir) == "gcs":
+                    print("executing gcs file check")
+                    file_exists = gcs_file_exists(layer_path)
+                elif gcs_or_local(output_dir) == "local":
+                    print("executing local file check")
+                    file_exists = os.path.exists(layer_path)
                 else:
-                    extend_dataset(dataframe, layer_path)
+                    raise ValueError("Something went wrong with the output directory. This script currently supports GCS and local paths only.")
+
+                # flush to disk
+                print(file_exists)
+                if file_exists == False:
+                    print(f"starting dataset creation process {i}")
+                    result = process_pool.apply_async(create_dataset, args=(dataframe, layer_path))
+                    results.append(result)
+                else:
+                    print(f"starting dataset extension process {i}")
+                    result = process_pool.apply_async(extend_dataset, args=(dataframe, layer_path))
+                    results.append(result)
+
+            # wait for threads to finish and close pool
+            process_pool.close()
+            process_pool.join()
+
+            stop = time.perf_counter()
+            print(f"Time to write batch: {stop - start}s")
 
             # reset count, batch
             batch = []
