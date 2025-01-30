@@ -12,7 +12,6 @@ from hsg.pipelines.variantmap import DNAVariantProcessor
 from hgvs.sequencevariant import SequenceVariant
 from biocommons.seqrepo import SeqRepo
 from tqdm import tqdm
-import csv
 
 from multiprocessing import Pool, cpu_count
 
@@ -69,7 +68,7 @@ def find_variant_ids(filepath: str) -> list[str]:
         raise ValueError("Could not find variant ID column in dataset")
 
 
-def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, variant_sequence: int) -> pd.DataFrame:
+def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, sequence: int) -> pd.DataFrame:
     """
     Package hidden states and metadata to be written to disk.
     """
@@ -79,13 +78,13 @@ def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, va
 
     # align 6-mer tokens with hidden states
     token_seq = ["<start>"]
-    token_seq.extend([variant_sequence[i:i+6] for i in range(0, len(variant_sequence), 6)])
+    token_seq.extend([sequence[i:i+6] for i in range(0, len(sequence), 6)])
     token_seq.append("<end>")
     token_seq = token_seq[:len(activations)]
     # drop masked / padding tokens
     activations.drop(activations.tail(len(activations)-len(token_seq)).index, axis=0, inplace=True)
     # finalize the dataframe
-    activations["variant_sequence"] = token_seq
+    activations["sequence"] = token_seq
     activations["variant_name"] = variant_name
 
     return activations
@@ -111,7 +110,7 @@ def create_dataset(dataframe: pd.DataFrame, address: str) -> None:
         return e
 
     stop = time.perf_counter()
-    print(f"Time to write file: {stop - start}")
+#    print(f"Time to write file: {stop - start}")
 
 
 def extend_dataset(dataframe: pd.DataFrame, address: str) -> None:
@@ -127,7 +126,7 @@ def extend_dataset(dataframe: pd.DataFrame, address: str) -> None:
         return e
 
     stop = time.perf_counter()
-    print(f"Time to write file: {stop - start}")
+#    print(f"Time to write file: {stop - start}")
 
 
 def get_unique_refseqs(csv_data_path, variant_processor: DNAVariantProcessor) -> list[str]:
@@ -234,21 +233,22 @@ def extract_hidden_states(
     # write to disk / bucket in batches
     count = 0
     batch: list[list[pd.DataFrame]] = []
+    batch_number = 0
     total_processed_accessions = 0
 
     for n, accession in tqdm(enumerate(unique_refseqs)):
 
-        variant_sequence = ""
+        sequence = ""
         try:
             seq_proxy = seqrepo[f"refseq:{accession}"]
-            variant_sequence = seq_proxy.__str__()
+            sequence = seq_proxy.__str__()
         except KeyError:
             print(f"Could not find refseq for accession: {accession}")
             continue
         
         # tokenize sequence
         tokenized_sequence = tokenizer.encode_plus(
-            variant_sequence, 
+            sequence, 
             return_tensors="pt", 
             padding="max_length", 
             truncation=True,
@@ -278,7 +278,7 @@ def extract_hidden_states(
             # copy tensor to cpu
             layer_act: torch.Tensor = layer_act.cpu()
             # process data
-            dataframe: pd.DataFrame = package_hidden_state_data(torch.squeeze(layer_act, 0), accession, variant_sequence)
+            dataframe: pd.DataFrame = package_hidden_state_data(torch.squeeze(layer_act, 0), accession, sequence)
             # merge with batch
             if count == 0:
                 batch.append([dataframe])
@@ -287,6 +287,9 @@ def extract_hidden_states(
 
         # flush staged embeddings to disk
         if count == batch_size or n == (len(unique_refseqs)-1):
+
+            batch_number += 1
+            print(f"\n--- Flushing Batch {batch_number} to Disk ---")
 
             # enable multiprocessing to alleviate I/O bottleneck
             start = time.perf_counter()
@@ -308,22 +311,22 @@ def extract_hidden_states(
                 # check local output or gcs output, apply appropriate utils to create vs extend dataset
                 file_exists = False
                 if gcs_or_local(output_dir) == "gcs":
-                    print("executing gcs file check")
+#                    print("executing gcs file check")
                     file_exists = gcs_file_exists(layer_path)
                 elif gcs_or_local(output_dir) == "local":
-                    print("executing local file check")
+#                    print("executing local file check")
                     file_exists = os.path.exists(layer_path)
                 else:
                     raise ValueError("Something went wrong with the output directory. This script currently supports GCS and local paths only.")
 
                 # flush to disk
-                print(file_exists)
+#                print(file_exists)
                 if file_exists == False:
-                    print(f"starting dataset creation process {i}")
+#                    print(f"starting dataset creation process {i}")
                     result = process_pool.apply_async(create_dataset, args=(dataframe, layer_path))
                     results.append(result)
                 else:
-                    print(f"starting dataset extension process {i}")
+#                    print(f"starting dataset extension process {i}")
                     result = process_pool.apply_async(extend_dataset, args=(dataframe, layer_path))
                     results.append(result)
 
@@ -332,12 +335,12 @@ def extract_hidden_states(
             process_pool.join()
 
             stop = time.perf_counter()
-            print(f"Time to write batch: {stop - start}s")
+#            print(f"Time to write batch: {stop - start}s")
 
             # reset count, batch
             batch = []
             count = 0
-            exit() # debug
+#            exit() # debug
 
         else:
             count += 1
