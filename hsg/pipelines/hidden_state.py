@@ -84,8 +84,8 @@ def package_hidden_state_data(hidden_states: torch.Tensor, variant_name: str, se
     # drop masked / padding tokens
     activations.drop(activations.tail(len(activations)-len(token_seq)).index, axis=0, inplace=True)
     # finalize the dataframe
-    activations["sequence"] = token_seq
-    activations["variant_name"] = variant_name
+    activations["token"] = token_seq
+    activations["id"] = [f"{variant_name}:{i}" for i in range(len(activations))]
 
     return activations
 
@@ -299,9 +299,9 @@ def extract_hidden_states(
             for i, df_list in enumerate(batch):
                 # get file labels
                 if i in range(len(model.esm.encoder.layer)):
-                    layer_id: str = f"{model.esm.encoder.layer[i].__class__.__name__}[{i}]"
+                    layer_id: str = f"{model.esm.encoder.layer[i].__class__.__name__}{i}"
                 else:
-                    layer_id: str = f"MLP_out[{i}]"
+                    layer_id: str = f"MLP_out{i}"
 
                 layer_path: str = f"{output_dir}/{layer_id}.csv"
 
@@ -335,7 +335,7 @@ def extract_hidden_states(
             process_pool.join()
 
             stop = time.perf_counter()
-#            print(f"Time to write batch: {stop - start}s")
+            print(f"Time to write batch: {stop - start}s")
 
             # reset count, batch
             batch = []
