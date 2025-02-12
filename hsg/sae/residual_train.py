@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # built ins
-import os, logging
+import os, logging, sys
 
 # external libs
 import torch
@@ -19,18 +19,22 @@ from hsg.sae.dictionary import AutoEncoder
 from hsg.sae.interleave import intervention_output
 from hsg.sae.protocol.epoch import train, validate
 
-
 #####################################################################################################
 # Main Functions
 #####################################################################################################
 def train_sae(
         parent_model, 
         tokenizer,
+        train_seqs: list,
         layer_idx: int, 
         log_dir: str, 
         expansion_factor: int, 
         device:str, 
         num_epochs: int,
+        batch_size: int,
+        learning_rate: float,
+        l1_penalty: float,
+        l1_annealing_steps: int,
     ) -> AutoEncoder:
     """
     Train a SAE on the output of a layer of a parent model.
@@ -50,38 +54,61 @@ def train_sae(
     # MAIN LOOP
     for epoch in range(1, num_epochs + 1):
 
-        # get activations
-        tokens = tokenizer
-
-        logits, activations = intervention_output(
-            model=parent_model, 
-            tokens=None,
-            attention_mask=None,
-            patch_layer=layer_idx,
-            hidden_state_override=None
-        )
+        pass
         
-
+    train_log_writer.flush()
+    train_log_writer.close()
     return SAE
 
 
 
 
 def train_all_layers(
+        # logistics
+        silent: bool = False,
         parent_model: str = os.environ["NT_MODEL"], 
         SAE_directory: str = "./data/sae", 
         log_dir: str = "./data/train_logs",
         variant_data: str = os.environ["CLIN_VAR_CSV"],
+        # parameters
         epochs: int = 1000,
+        batch_size: int = 64,
+        learning_rate: float = 0.001,
+        l1_penalty: float = 0.0001,
+        l1_annealing_steps: int = 100,
+        dict_expansion_factor: int = 8,
         **kwargs
     ):
     """
     Command line interface to train a series of SAEs on the output of each layer of a parent model. Uses GPU if available.
 
     Args:
+        silent (bool): If True, suppresses logging output. Useful for training on a server.
         parent_model (str): The name of the parent model to be loaded from huggingface.
-        model_directory (str): The directory to save the trained SAEs to.
+        SAE_directory (str): The directory to save the trained SAEs to.
+        log_dir (str): The directory to save the training logs to.
+        variant_data (str): The path to the ClinVar VCF file to be used for training.
+        epochs (int): The number of epochs to train for.
+        batch_size (int): The size of the batches to use for training.
+        learning_rate (float): The learning rate to use for training.
+        l1_penalty (float): The L1 penalty to use for training.
+        l1_annealing_steps (int): The number of steps to anneal the L1 penalty over.
+        dict_expansion_factor (int): The factor by which to expand the dictionary size.
     """
+
+    # logging
+    if silent:
+        import warnings
+        warnings.filterwarnings("ignore")
+        logging.disable(logging.INFO)
+        logging.disable(logging.WARNING)
+        logging.disable(logging.DEBUG)
+        logging.basicConfig(level=logging.ERROR)
+        logging.getLogger("main").addHandler(logging.StreamHandler(sys.stdout))
+    else:
+        logging.basicConfig(level=logging.INFO)
+        logging.getLogger("main").addHandler(logging.StreamHandler(sys.stdout))
+
     # gather objects
     print("Gathering Resources...")
 
@@ -97,13 +124,17 @@ def train_all_layers(
     print(f"SAEs will be saved to: {SAE_directory}\n")
     print("--- Parameters --- \n")
     print(f"Max Epochs: {epochs}")
-    print(kwargs)
+    print(f"Batch Size: {batch_size}")
+    print(f"Learning Rate: {learning_rate}")
+    print(f"L1 Penalty: {l1_penalty}")
+    print(f"L1 Annealing Steps: {l1_annealing_steps}")
+    print(f"Dictionary Expansion Factor: {dict_expansion_factor}")
     print("===============================================================")
 
     # get sequences as strings
     print("Loading Sequences...")
     train_seqs = []
-    for acc in tqdm(accessions):
+    for acc in tqdm(accessions, disable=silent):
         try:
             proxy = seq_repo[f"refseq:{acc}"]
             seq = proxy.__str__()
@@ -123,8 +154,13 @@ def train_all_layers(
             tokenizer=tokenizer,
             layer_idx=layer, 
             log_dir=log_dir, 
+            expansion_factor=dict_expansion_factor,
             device=device,
             num_epochs=epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            l1_penalty=l1_penalty,
+            l1_annealing_steps=l1_annealing_steps
         )
 
         # save trained SAEs
@@ -142,7 +178,7 @@ def train_all_layers(
             # if we find more than 10 copies of a trained SAE, ok to start overwriting.
             for i in range(1, 11):
                 if not os.path.exists(os.path.join(SAE_directory, f"layer_{layer}({i}).pt")):
-                    torch.save(sae.state_dict(), os.path.join(SAE_directory, f"layer_({layer}{i}).pt"))
+                    torch.save(sae.state_dict(), os.path.join(SAE_directory, f"layer_{layer}({i}).pt"))
                     break
                 elif i == 10:
                     logging.info(f"Too many copies of layer {layer} exist. Overwriting.")
