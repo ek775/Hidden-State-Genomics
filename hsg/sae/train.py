@@ -1,136 +1,235 @@
-from tap import tapify
-from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.types import StructType, StructField
-from pyspark.sql.types import StringType, FloatType
-import torch
-import torch.nn as nn
-from hsg.sae.dictionary import AutoEncoder
-from google.cloud import storage
-import google.auth
-
-import os
-
 # load environment variables
 from dotenv import load_dotenv
 load_dotenv()
 
-# google authentication for hadoop
-credentials, project = google.auth.default()
+# built ins
+import os, logging, sys
+from random import shuffle
 
+# external libs
+import torch
+from torch.utils.tensorboard import SummaryWriter
+from biocommons.seqrepo import SeqRepo
+from tqdm import tqdm
+from tap import tapify
 
-### HELPER FUNCTIONS ###
-def config_spark() -> SparkSession:
+# hsg modules
+from hsg.pipelines.hidden_state import load_model, get_unique_refseqs
+from hsg.pipelines.variantmap import DNAVariantProcessor
+from hsg.sae.dictionary import AutoEncoder
+from hsg.sae.protocol.etl import extract_hidden_states
+from hsg.sae.protocol.epoch import train, validate
+from hsg.sae.math.loss import mse_reconstruction_loss
+
+#####################################################################################################
+# Main Functions
+#####################################################################################################
+def train_sae(
+        parent_model, 
+        tokenizer,
+        train_seqs: list,
+        layer_idx: int, 
+        log_dir: str, 
+        expansion_factor: int, 
+        device:str, 
+        num_epochs: int,
+        batch_size: int,
+        learning_rate: float,
+        l1_penalty: float,
+        l1_annealing_steps: int,
+        silent: bool = False
+    ) -> AutoEncoder:
     """
-    Configures the spark session with the necessary settings for GCS. 
+    Train a SAE on the output of a layer of a parent model.
+    """
+
+    # initializing stuffs
+    train_log_writer = SummaryWriter(log_dir=os.path.join(log_dir, f"layer_{layer_idx}"))
+    activation_dim = parent_model.esm.encoder.layer[layer_idx].output.dense.out_features
+    num_latents = activation_dim * expansion_factor
+
+    SAE = AutoEncoder(activation_dim=activation_dim, dict_size=num_latents)
+    try:
+        SAE.to(device)
+    except torch.OutOfMemoryError:
+        logging.error("GPU memory insufficient to host both parent model and SAE. Attempting to train SAE on CPU.")
+        device = torch.device("cpu")
+        SAE.to(device)
+
+    optimizer = torch.optim.SGD(SAE.parameters(), lr=0.001, momentum=0.9)
+    loss_fn = mse_reconstruction_loss
     
-    Note that spark does not support native gcloud sdk authentication, so we need to provide the credentials manually.
-    This function utilizes the python gcloud sdk to pass the appropriate credentials to the spark session for security.
+    # create training, validation sets with 10% hold out
+    shuffle(train_seqs)
+    split = len(train_seqs) // 10
+    train_set = train_seqs[:len(train_seqs)-split] # 10% validation set
+    val_set = train_seqs[len(train_seqs)-split:]
+    del train_seqs # memory management
+
+    # MAIN LOOP
+    for epoch in range(1, num_epochs + 1):
+
+        # treat individual sequences as SAE batches of (seq_length, hidden_size)
+        # train
+        loss = 0
+        current_l1_penalty = l1_penalty * min(1, epoch / l1_annealing_steps)
+
+        for seq in tqdm(train_set, disable=silent):
+            batch = extract_hidden_states(model=parent_model, sequence=seq, tokenizer=tokenizer, layer=layer_idx, device=device)
+            loss = train(SAE, batch, optimizer=optimizer, loss_fn=loss_fn, l1_penalty=current_l1_penalty)
+
+        # validate
+        val_loss = []
+        for seq in val_set:
+            batch = extract_hidden_states(model=parent_model, sequence=seq, tokenizer=tokenizer, layer=layer_idx, device=device)
+            val_loss.append(validate(SAE, batch, loss_fn=loss_fn, l1_penalty=current_l1_penalty))
+
+        avg_val_loss = sum(val_loss) / len(val_loss)
+
+        # add checkpoint logic here
+
+        # logging
+        logging.info(f"Epoch {epoch} - Train Loss: {loss}, Val Loss: {avg_val_loss}")
+
+        train_log_writer.add_scalar("Loss/train", loss, epoch)
+        train_log_writer.add_scalar("Loss/val", avg_val_loss, epoch)
+        train_log_writer.add_scalar("L1 Penalty", current_l1_penalty, epoch)
+        train_log_writer.add_scalar("Learning Rate", optimizer.param_groups[0]["lr"], epoch)
+        train_log_writer.flush()
+        
+    # wrap up
+    train_log_writer.close()
+    return SAE
+
+#####################################################################################################
+
+def train_all_layers(
+        # logistics
+        silent: bool = False,
+        parent_model: str = os.environ["NT_MODEL"], 
+        SAE_directory: str = "./data/sae", 
+        log_dir: str = "./data/train_logs",
+        variant_data: str = os.environ["CLIN_VAR_CSV"],
+        # parameters
+        epochs: int = 1000,
+        batch_size: int = 64,
+        learning_rate: float = 0.0001,
+        l1_penalty: float = 0.001,
+        l1_annealing_steps: int = 100,
+        dict_expansion_factor: int = 8,
+        **kwargs
+    ):
     """
-    spark = SparkSession.builder\
-        .master("local")\
-        .appName("SAE")\
-        .config("spark.jars", "https://storage.googleapis.com/hadoop-lib/gcs/gcs-connector-hadoop3-latest.jar")\
-        .getOrCreate()
-    
-
-    spark._jsc.hadoopConfiguration().set('fs.AbstractFileSystem.gs.impl', 'com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS')
-    spark._jsc.hadoopConfiguration().set('fs.gs.impl', 'com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem')
-    spark._jsc.hadoopConfiguration().set('fs.gs.project.id', project)
-    spark._jsc.hadoopConfiguration().set('fs.gs.auth.client.id', credentials.client_id)
-    spark._jsc.hadoopConfiguration().set('fs.gs.auth.client.secret', credentials.client_secret)
-    spark._jsc.hadoopConfiguration().set('fs.gs.auth.refresh.token', credentials.refresh_token)
-
-    spark.conf.set("spark.sql.repl.eagerEval.enabled", True)
-
-    return spark
-
-
-def load_data(data_path: str, spark: SparkSession, hidden_size: int) -> DataFrame:
-    """
-    Loads SAE training data from a given csv file via spark.
+    Command line interface to train a series of SAEs on the output of each layer of a parent model. Uses GPU if available.
 
     Args:
-        data_path: The path to the csv file containing the training data.
-        spark: The spark session to use for loading the data.
-        hidden_size: Size of hidden layer for constructing schema.
-    Returns:
-        A DataFrame containing the training data.
+        silent (bool): If True, suppresses logging output. Useful for training on a server.
+        parent_model (str): The name of the parent model to be loaded from huggingface.
+        SAE_directory (str): The directory to save the trained SAEs to.
+        log_dir (str): The directory to save the training logs to.
+        variant_data (str): The path to the ClinVar VCF file to be used for training.
+        epochs (int): The number of epochs to train for.
+        batch_size (int): The size of the batches to use for training.
+        learning_rate (float): The learning rate to use for training.
+        l1_penalty (float): The L1 penalty to use for training.
+        l1_annealing_steps (int): The number of steps to anneal the L1 penalty over.
+        dict_expansion_factor (int): The factor by which to expand the dictionary size.
     """
-    # define schema
-#    hidden_states = [StructField(str(i), FloatType()) for i in range(hidden_size)]
-#    meta_fields = [StructField("token", StringType()), StructField("id", StringType())]
-#    schema = StructType(hidden_states + meta_fields)
-    # load data
-    print(f"Loading data from {data_path}")
-    data = spark.read.csv(data_path, header=True)
-    print("=== DONE ===")
-    return data
 
-
-def get_model(activation_dim: int, dict_size: int) -> AutoEncoder:
-    """
-    Instantiates the model and moves it to the GPU if available.
-    """
-    model = AutoEncoder(activation_dim=activation_dim, dict_size=dict_size)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    return model
-
-
-### MAIN FUNCTION ###
-
-def main(
-    input_size: int,
-    feature_size: int,
-    data_path: str = os.environ["GCLOUD_BUCKET"],
-    epochs: int = 1000,
-    batch_size: int = 32,
-    learning_rate: float = 0.01,
-):
-    """ 
-
-    Train a given SAE model on extracted embeddings.
-
-    Args:
-        input_size: The size of the input data.
-        feature_size: The size of the feature embeddings.
-        data_path: The path to the training data.
-        epochs: The number of epochs to train the model.
-        batch_size: The number of samples per batch.
-        learning_rate: The learning rate for the optimizer.
-
-    Returns:
-        A trained SAE model for extracting features from hidden_statess.
-
-    """
-    hidden_layers = []
-
-    spark_config = config_spark()
-
-    if data_path.startswith("gs://"):
-        storage_client = storage.Client()
-        bucket = storage_client.get_bucket(data_path.split("/")[2])
-        blobs = bucket.list_blobs()
-        hidden_layers = [blob.name for blob in blobs]
+    # logging
+    if silent:
+        import warnings
+        warnings.filterwarnings("ignore")
+        logging.disable(logging.INFO)
+        logging.disable(logging.WARNING)
+        logging.disable(logging.DEBUG)
+        logging.basicConfig(level=logging.ERROR)
+        logging.getLogger("main").addHandler(logging.StreamHandler(sys.stdout))
     else:
-        hidden_layers = [os.listdir(data_path)]
-        
-    for layer in hidden_layers:
+        logging.basicConfig(level=logging.INFO)
+        logging.getLogger("main").addHandler(logging.StreamHandler(sys.stdout))
 
-        autoencoder = get_model(activation_dim=input_size, dict_size=feature_size)
-        print(autoencoder)
-        
-        embed_df = load_data(data_path=f"{data_path}/{layer}", spark=spark_config, hidden_size=input_size)
+    # gather objects
+    print("Gathering Resources...")
 
-        count = 0 
-        for row in embed_df.rdd.toLocalIterator():
-            if count == 0:
-                print(row)
-                count += 1
-            else:
-                count += 1
-        print(count)
+    model, tokenizer, device = load_model(parent_model)
+    accessions = get_unique_refseqs(variant_data, DNAVariantProcessor())
+    seq_repo = SeqRepo(os.environ["SEQREPO_PATH"])
+    n_layers = len(model.esm.encoder.layer)
 
+    print("===============================================================")
+    print(f"Preparing to extract features from: {parent_model}")
+    print(f"Training {n_layers} SAEs on {len(accessions)} sequences.")
+    print(f"Logs will be written to: {log_dir}")
+    print(f"SAEs will be saved to: {SAE_directory}\n")
+    print("--- Parameters --- \n")
+    print(f"Max Epochs: {epochs}")
+    print(f"Batch Size: {batch_size}")
+    print(f"Learning Rate: {learning_rate}")
+    print(f"L1 Penalty: {l1_penalty}")
+    print(f"L1 Annealing Steps: {l1_annealing_steps}")
+    print(f"Dictionary Expansion Factor: {dict_expansion_factor}")
+    print("===============================================================")
 
+    # get sequences as strings
+    print("Loading Sequences...")
+    train_seqs = []
+    for acc in tqdm(accessions, disable=silent):
+        try:
+            proxy = seq_repo[f"refseq:{acc}"]
+            seq = proxy.__str__()
+        except KeyError:
+            logging.warning(f"Accession {acc} not found in SeqRepo. Skipping.")
+            continue
+
+        train_seqs.append(seq)
+    print("Beginning Training...")
+
+    # core training loop - may attempt multiprocessing later
+    for layer in range(n_layers):
+
+        sae = train_sae(
+            parent_model=model, 
+            train_seqs=train_seqs,
+            tokenizer=tokenizer,
+            layer_idx=layer, 
+            log_dir=log_dir, 
+            expansion_factor=dict_expansion_factor,
+            device=device,
+            num_epochs=epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            l1_penalty=l1_penalty,
+            l1_annealing_steps=l1_annealing_steps,
+            silent=silent
+        )
+
+        # save trained SAEs
+        save_path = os.path.join(SAE_directory, f"layer_{layer}.pt")
+
+        if not os.path.exists(SAE_directory):
+            os.makedirs(SAE_directory)
+            torch.save(sae.state_dict(), save_path)
+
+        # check for overwrites
+        elif os.path.exists(save_path):
+
+            logging.info(f"Layer {layer} already exists. attempting to save copy.")
+
+            # if we find more than 10 copies of a trained SAE, ok to start overwriting.
+            for i in range(1, 11):
+                if not os.path.exists(os.path.join(SAE_directory, f"layer_{layer}({i}).pt")):
+                    torch.save(sae.state_dict(), os.path.join(SAE_directory, f"layer_{layer}({i}).pt"))
+                    break
+                elif i == 10:
+                    logging.info(f"Too many copies of layer {layer} exist. Overwriting.")
+                    torch.save(sae.state_dict(), save_path)
+                else:
+                    continue
+        # save or overwrite
+        else:
+            torch.save(sae.state_dict(), save_path)
+
+### run module as cmdline tool ###
 if __name__ == "__main__":
-    tapify(main)
+    tapify(train_all_layers)
