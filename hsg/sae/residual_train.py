@@ -22,7 +22,7 @@ from hsg.sae.interleave import intervention_output
 #####################################################################################################
 # Main Functions
 #####################################################################################################
-def train_sae(parent_model, layer_idx: int, log_dir: str, expansion_factor: int, **kwargs) -> AutoEncoder:
+def train_sae(parent_model, layer_idx: int, log_dir: str, expansion_factor: int, device:str, **kwargs) -> AutoEncoder:
     """
     Train a SAE on the output of a layer of a parent model.
     """
@@ -30,6 +30,12 @@ def train_sae(parent_model, layer_idx: int, log_dir: str, expansion_factor: int,
     activation_dim = parent_model.esm.encoder.layer[layer_idx].output.dense.out_features
     num_latents = activation_dim * expansion_factor
     SAE = AutoEncoder(activation_dim=activation_dim, dict_size=num_latents)
+    try:
+        SAE.to(device)
+    except torch.OutOfMemoryError:
+        logging.error("GPU memory insufficient to host both parent model and SAE. Attempting to train SAE on CPU.")
+        device = torch.device("cpu")
+        SAE.to(device)
     
     return SAE
 
@@ -55,7 +61,7 @@ def train_all_layers(
 
     # core training loop - may attempt multiprocessing later
     for layer in range(n_layers):
-        sae = train_sae(parent_model=model, layer_idx=layer, log_dir=log_dir)
+        sae = train_sae(parent_model=model, layer_idx=layer, log_dir=log_dir, device=device)
         torch.save(sae.state_dict(), os.path.join(SAE_directory, f"layer_{layer}.pt"))
     pass
 
