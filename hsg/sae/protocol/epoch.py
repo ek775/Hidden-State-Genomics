@@ -12,9 +12,11 @@ def train(model, data: torch.Tensor, optimizer, loss_fn, l1_penalty) -> float:
     loss = loss_fn(x=data, x_hat=logits, latents=latents, current_l1_penalty=l1_penalty)
     loss.backward()
 
+    accuracy = torch.nn.functional.mse_loss(logits, data, reduction="mean")
+
     optimizer.step()
 
-    return loss
+    return loss, accuracy
 
 
 def validate(model, data: torch.Tensor, loss_fn, l1_penalty) -> float:
@@ -26,5 +28,7 @@ def validate(model, data: torch.Tensor, loss_fn, l1_penalty) -> float:
         logits, latents = model(data, output_features=True)
         loss = loss_fn(x=data, x_hat=logits, latents=latents, current_l1_penalty=l1_penalty)
 
-        return loss
+        accuracy = torch.nn.functional.mse_loss(logits, data, reduction="mean")
+
+        return loss, accuracy
 

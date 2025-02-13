@@ -5,7 +5,6 @@ load_dotenv()
 # built ins
 import os, logging, sys
 from random import shuffle
-from itertools import groupby
 
 # external libs
 import torch
@@ -46,12 +45,26 @@ def train_sae(
     Train a SAE on the output of a layer of a parent model.
     """
 
-    # initializing stuffs
+    ### initializing stuffs ###
+
+    # for early stopping
     tracker = History(patience=early_stop_patience, layer=layer_idx)
-    train_log_writer = SummaryWriter(log_dir=os.path.join(log_dir, f"layer_{layer_idx}"))
+
+    # for tensorboard logging
+    train_log_writer = SummaryWriter(log_dir=os.path.join(log_dir, f"layer_{layer_idx}")) 
+    layout = {
+        f"layer_{layer_idx}": {
+            "Accuracy": ["Multiline", ["Accuracy/Train", "Accuracy/Val"]],
+            "Loss": ["Multiline", ["Loss/Train", "Loss/Val"]],
+        },
+    }
+    train_log_writer.add_custom_scalars(layout)
+
+    # config SAE
     activation_dim = parent_model.esm.encoder.layer[layer_idx].output.dense.out_features
     num_latents = activation_dim * expansion_factor
 
+    # try to load SAE on GPU, if not enough memory, train on CPU
     SAE = AutoEncoder(activation_dim=activation_dim, dict_size=num_latents)
     try:
         SAE.to(device)
@@ -60,6 +73,7 @@ def train_sae(
         device = torch.device("cpu")
         SAE.to(device)
 
+    # optimizer and loss function
     optimizer = torch.optim.Adam(SAE.parameters(), lr=learning_rate)
     loss_fn = mse_reconstruction_loss
     
@@ -67,11 +81,16 @@ def train_sae(
     # shard the data due to immense size of dataset and resource/time limitations
     shuffle(train_seqs)
     split = len(train_seqs) // 10 # 10% validation split
-    train_shards = [item for _, item in groupby(train_seqs[:len(train_seqs)-split], lambda x: x % shard_size)]
-    val_shards = [item for _, item in groupby(train_seqs[len(train_seqs)-split:], lambda x: x % shard_size)]
+
+    train_shards = train_seqs[:len(train_seqs)-split]
+    train_shards = [train_shards[i:i + shard_size] for i in range(0, len(train_shards), shard_size)]
+
+    val_shards = train_seqs[len(train_seqs)-split:]
+    val_shards = [val_shards[i:i + shard_size] for i in range(0, len(val_shards), shard_size)]
+
     del train_seqs # memory management
 
-    # MAIN LOOP
+    ### MAIN LOOP ###
     for epoch in range(1, num_epochs + 1):
         # select shards, allowing for looping if large shard size
         train_loc = epoch % len(train_shards)
@@ -80,34 +99,41 @@ def train_sae(
         val_set = val_shards[val_loc]
 
         # train, treating each sequence as an SAE batch
-        loss = 0
+        train_loss = 0
+        train_acc = 0
         current_l1_penalty = l1_penalty * min(1, epoch / l1_annealing_steps)
 
         logging.info(f"Training SAE on layer {layer_idx} - Epoch {epoch} - L1 Penalty: {current_l1_penalty} - Shards: T={len(train_shards)} V={len(val_shards)}")
         for seq in tqdm(train_set, disable=silent):
             batch = extract_hidden_states(model=parent_model, sequence=seq, tokenizer=tokenizer, layer=layer_idx, device=device)
-            loss = train(SAE, batch, optimizer=optimizer, loss_fn=loss_fn, l1_penalty=current_l1_penalty)
+            train_loss, train_acc = train(SAE, batch, optimizer=optimizer, loss_fn=loss_fn, l1_penalty=current_l1_penalty)
 
         # validate
         logging.info("Validating...")
         val_loss = []
+        val_acc = []
         for seq in tqdm(val_set, disable=silent):
             batch = extract_hidden_states(model=parent_model, sequence=seq, tokenizer=tokenizer, layer=layer_idx, device=device)
-            val_loss.append(validate(SAE, batch, loss_fn=loss_fn, l1_penalty=current_l1_penalty))
+            loss, accuracy = validate(SAE, batch, loss_fn=loss_fn, l1_penalty=current_l1_penalty)
+            val_loss.append(loss)
+            val_acc.append(accuracy)
 
         avg_val_loss = sum(val_loss) / len(val_loss)
+        avg_val_acc = sum(val_acc) / len(val_acc)
 
         # checkpoint logic
-        SAE = tracker.update(SAE, loss, avg_val_loss, epoch)
+        SAE = tracker.update(SAE, train_acc, avg_val_acc, epoch)
         if tracker.early_stop:
             logging.info(f"Early stopping at epoch {epoch}.")
             break
 
         # logging
-        logging.info(f"Epoch {epoch} - Train Loss: {loss}, Val Loss: {avg_val_loss}")
+        logging.info(f"Epoch {epoch} - Train Acc: {train_acc}, Val Acc: {avg_val_acc} - Train Loss: {loss}, Val Loss: {avg_val_loss}")
 
-        train_log_writer.add_scalar("Loss/train", loss, epoch)
-        train_log_writer.add_scalar("Loss/val", avg_val_loss, epoch)
+        train_log_writer.add_scalar("Accuracy/Train", train_acc, epoch)
+        train_log_writer.add_scalar("Accuracy/Val", avg_val_acc, epoch)
+        train_log_writer.add_scalar("Loss/Train", train_loss, epoch)
+        train_log_writer.add_scalar("Loss/Val", avg_val_loss, epoch)
         train_log_writer.add_scalar("L1 Penalty", current_l1_penalty, epoch)
         train_log_writer.add_scalar("Learning Rate", optimizer.param_groups[0]["lr"], epoch)
         train_log_writer.flush()
