@@ -22,7 +22,6 @@ def validate(model, data: torch.Tensor, loss_fn, l1_penalty) -> float:
     Runs the model in eval mode and returns the loss
     """
     with torch.no_grad():
-        model.eval()
 
         logits, latents = model(data, output_features=True)
         loss = loss_fn(x=data, x_hat=logits, latents=latents, current_l1_penalty=l1_penalty)

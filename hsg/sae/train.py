@@ -5,6 +5,7 @@ load_dotenv()
 # built ins
 import os, logging, sys
 from random import shuffle
+from itertools import groupby
 
 # external libs
 import torch
@@ -20,6 +21,7 @@ from hsg.sae.dictionary import AutoEncoder
 from hsg.sae.protocol.etl import extract_hidden_states
 from hsg.sae.protocol.epoch import train, validate
 from hsg.sae.math.loss import mse_reconstruction_loss
+from hsg.sae.protocol.checkpoint import History
 
 #####################################################################################################
 # Main Functions
@@ -33,10 +35,11 @@ def train_sae(
         expansion_factor: int, 
         device:str, 
         num_epochs: int,
-        batch_size: int,
+        shard_size: int,
         learning_rate: float,
         l1_penalty: float,
         l1_annealing_steps: int,
+        early_stop_patience: int = 100,
         silent: bool = False
     ) -> AutoEncoder:
     """
@@ -44,6 +47,7 @@ def train_sae(
     """
 
     # initializing stuffs
+    tracker = History(patience=early_stop_patience, layer=layer_idx)
     train_log_writer = SummaryWriter(log_dir=os.path.join(log_dir, f"layer_{layer_idx}"))
     activation_dim = parent_model.esm.encoder.layer[layer_idx].output.dense.out_features
     num_latents = activation_dim * expansion_factor
@@ -56,37 +60,48 @@ def train_sae(
         device = torch.device("cpu")
         SAE.to(device)
 
-    optimizer = torch.optim.SGD(SAE.parameters(), lr=0.001, momentum=0.9)
+    optimizer = torch.optim.Adam(SAE.parameters(), lr=learning_rate)
     loss_fn = mse_reconstruction_loss
     
-    # create training, validation sets with 10% hold out
+    # create training, validation sets with 10% hold out,
+    # shard the data due to immense size of dataset and resource/time limitations
     shuffle(train_seqs)
-    split = len(train_seqs) // 10
-    train_set = train_seqs[:len(train_seqs)-split] # 10% validation set
-    val_set = train_seqs[len(train_seqs)-split:]
+    split = len(train_seqs) // 10 # 10% validation split
+    train_shards = [item for _, item in groupby(train_seqs[:len(train_seqs)-split], lambda x: x % shard_size)]
+    val_shards = [item for _, item in groupby(train_seqs[len(train_seqs)-split:], lambda x: x % shard_size)]
     del train_seqs # memory management
 
     # MAIN LOOP
     for epoch in range(1, num_epochs + 1):
+        # select shards, allowing for looping if large shard size
+        train_loc = epoch % len(train_shards)
+        val_loc = epoch % len(val_shards)
+        train_set = train_shards[train_loc]
+        val_set = val_shards[val_loc]
 
-        # treat individual sequences as SAE batches of (seq_length, hidden_size)
-        # train
+        # train, treating each sequence as an SAE batch
         loss = 0
         current_l1_penalty = l1_penalty * min(1, epoch / l1_annealing_steps)
 
+        logging.info(f"Training SAE on layer {layer_idx} - Epoch {epoch} - L1 Penalty: {current_l1_penalty} - Shards: T={len(train_shards)} V={len(val_shards)}")
         for seq in tqdm(train_set, disable=silent):
             batch = extract_hidden_states(model=parent_model, sequence=seq, tokenizer=tokenizer, layer=layer_idx, device=device)
             loss = train(SAE, batch, optimizer=optimizer, loss_fn=loss_fn, l1_penalty=current_l1_penalty)
 
         # validate
+        logging.info("Validating...")
         val_loss = []
-        for seq in val_set:
+        for seq in tqdm(val_set, disable=silent):
             batch = extract_hidden_states(model=parent_model, sequence=seq, tokenizer=tokenizer, layer=layer_idx, device=device)
             val_loss.append(validate(SAE, batch, loss_fn=loss_fn, l1_penalty=current_l1_penalty))
 
         avg_val_loss = sum(val_loss) / len(val_loss)
 
-        # add checkpoint logic here
+        # checkpoint logic
+        SAE = tracker.update(SAE, loss, avg_val_loss, epoch)
+        if tracker.early_stop:
+            logging.info(f"Early stopping at epoch {epoch}.")
+            break
 
         # logging
         logging.info(f"Epoch {epoch} - Train Loss: {loss}, Val Loss: {avg_val_loss}")
@@ -110,9 +125,10 @@ def train_all_layers(
         SAE_directory: str = "./data/sae", 
         log_dir: str = "./data/train_logs",
         variant_data: str = os.environ["CLIN_VAR_CSV"],
+        early_stop_patience: int = 100,
         # parameters
         epochs: int = 1000,
-        batch_size: int = 64,
+        shard_size: int = 256,
         learning_rate: float = 0.0001,
         l1_penalty: float = 0.001,
         l1_annealing_steps: int = 100,
@@ -129,7 +145,7 @@ def train_all_layers(
         log_dir (str): The directory to save the training logs to.
         variant_data (str): The path to the ClinVar VCF file to be used for training.
         epochs (int): The number of epochs to train for.
-        batch_size (int): The size of the batches to use for training.
+        shard_size (int): Number of sequences to train on per epoch.
         learning_rate (float): The learning rate to use for training.
         l1_penalty (float): The L1 penalty to use for training.
         l1_annealing_steps (int): The number of steps to anneal the L1 penalty over.
@@ -164,7 +180,7 @@ def train_all_layers(
     print(f"SAEs will be saved to: {SAE_directory}\n")
     print("--- Parameters --- \n")
     print(f"Max Epochs: {epochs}")
-    print(f"Batch Size: {batch_size}")
+    print(f"Shard Size: {shard_size}")
     print(f"Learning Rate: {learning_rate}")
     print(f"L1 Penalty: {l1_penalty}")
     print(f"L1 Annealing Steps: {l1_annealing_steps}")
@@ -197,11 +213,12 @@ def train_all_layers(
             expansion_factor=dict_expansion_factor,
             device=device,
             num_epochs=epochs,
-            batch_size=batch_size,
+            shard_size=shard_size,
             learning_rate=learning_rate,
             l1_penalty=l1_penalty,
             l1_annealing_steps=l1_annealing_steps,
-            silent=silent
+            silent=silent,
+            early_stop_patience=early_stop_patience
         )
 
         # save trained SAEs
