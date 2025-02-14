@@ -47,6 +47,8 @@ class DNAVariantProcessor():
         try:
             parsed_variant = self.parser.parse(hgvs_expression)
             #print(f"Parsed HGVS Expression: {parsed_variant}")  # Print the parsed result
+            #print(parsed_variant.fill_ref, parsed_variant.format)
+            #print(dir(parsed_variant))
             return parsed_variant
          
         except Exception as e: 
@@ -75,9 +77,12 @@ class DNAVariantProcessor():
         """
         Retrieve reference sequence from seqrepo.
         """
-
-        sequence_proxy = self.seq_repo[f"refseq:{hgvs_ref.ac}"]
-        return sequence_proxy.__str__()
+        print(hgvs_ref)
+        variant_start: int = hgvs_ref.posedit.pos.start.base
+        variant_end: int = hgvs_ref.posedit.pos.end.base
+        seq_ret = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-1 : int(variant_end)+3]
+    
+        return seq_ret
 
 
     def retrieve_variantseq(self, hgvs_ref: SequenceVariant) -> str:
@@ -87,7 +92,9 @@ class DNAVariantProcessor():
         """
 
         variant_start: int = hgvs_ref.posedit.pos.start.base
+        print("start",variant_start)
         variant_end: int = hgvs_ref.posedit.pos.end.base
+        print("end",variant_end)
 
         # some variant types may not have a reference or variant allele (i.e. copy number variants)
         try:
@@ -121,3 +128,5 @@ class DNAVariantProcessor():
         
         return varseq
 
+#https://www.ncbi.nlm.nih.gov/nuccore/NM_000277.3
+#https://www.ncbi.nlm.nih.gov/nuccore/NM_000277.2
