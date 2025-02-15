@@ -16,7 +16,7 @@ def train(model, data: torch.Tensor, optimizer, loss_fn, l1_penalty) -> float:
 
     optimizer.step()
 
-    return loss, accuracy
+    return loss.item(), accuracy.item()
 
 
 def validate(model, data: torch.Tensor, loss_fn, l1_penalty) -> float:
@@ -30,5 +30,5 @@ def validate(model, data: torch.Tensor, loss_fn, l1_penalty) -> float:
 
         accuracy = torch.nn.functional.mse_loss(logits, data, reduction="mean")
 
-        return loss, accuracy
+        return loss.item(), accuracy.item()
 

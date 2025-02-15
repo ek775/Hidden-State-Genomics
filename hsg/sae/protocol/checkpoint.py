@@ -14,27 +14,47 @@ class History():
         }
         self.layer = layer
         self.best_loss = float('inf')
+        self.best_epoch = 0
         self.patience = patience
         self.counter = 0
         self.checkpoint_dir = checkpoint_dir
         self.early_stop = False
 
-    def checkpoint(self, model, checkpoint_dir: str):
+    def checkpoint(self, model):
         """
         Save the model to disk.
         """
-        if not os.path.exists(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
             
-        torch.save(model.state_dict(), f"{checkpoint_dir}/best_model{self.layer}.pt")
+        self.best_epoch = self.history["epoch"][-1]
+        self.best_loss = self.history["val"][-1]
+        self.counter = 0
 
-    def reload_checkpoint(self, model, checkpoint_dir: str) -> AutoEncoder:
+        torch.save(model.state_dict(), f"{self.checkpoint_dir}/best_model{self.layer}.pt")
+
+    def best_metrics(self) -> dict:
+        """
+        Returns the best metrics of the model.
+        """
+        index = self.history["epoch"].index(self.best_epoch)
+        metrics = {
+            "train": self.history["train"][index],
+            "val": self.history["train"][index],
+            "epoch": self.history["epoch"][index]
+        }
+
+        return metrics
+
+    def reload_checkpoint(self, model) -> AutoEncoder:
         """
         Reload the model from disk.
         """
-        model.from_pretrained(f"{checkpoint_dir}/best_model{self.layer}.pt")
+        model.from_pretrained(f"{self.checkpoint_dir}/best_model{self.layer}.pt")
 
-    def update(self, model, train_value, val_value, epoch) -> AutoEncoder:
+        return model
+
+    def update(self, model, train_value, val_value, epoch) -> bool:
         # add new epoch values to history
         self.history["train"].append(train_value)
         self.history["val"].append(val_value)
@@ -42,9 +62,7 @@ class History():
 
         # check performance
         if val_value < self.best_loss:
-            self.best_loss = val_value
-            self.counter = 0
-            self.checkpoint(model, self.checkpoint_dir)
+            self.checkpoint(model)
         else:
             self.counter += 1
 
@@ -56,6 +74,6 @@ class History():
         # reload best model if early stopping
         if self.counter >= self.patience:
             self.early_stop = True
-            return self.reload_checkpoint(model, self.checkpoint_dir)
+            return self.early_stop, 
         else:
-            return model
+            return self.early_stop
