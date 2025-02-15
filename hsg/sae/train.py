@@ -122,9 +122,12 @@ def train_sae(
         avg_val_acc = sum(val_acc) / len(val_acc)
 
         # checkpoint logic
-        SAE = tracker.update(SAE, train_acc, avg_val_acc, epoch)
+        tracker.update(SAE, train_acc, avg_val_acc, epoch)
         if tracker.early_stop:
             logging.info(f"Early stopping at epoch {epoch}.")
+            SAE = tracker.reload_checkpoint(SAE)
+            train_log_writer.add_text("Best Restored Model:", str(tracker.best_metrics()))
+            train_log_writer.flush()
             break
 
         # logging
@@ -137,6 +140,9 @@ def train_sae(
         train_log_writer.add_scalar("L1 Penalty", current_l1_penalty, epoch)
         train_log_writer.add_scalar("Learning Rate", optimizer.param_groups[0]["lr"], epoch)
         train_log_writer.flush()
+
+        # server memory management
+        torch.cuda.empty_cache()
         
     # wrap up
     train_log_writer.close()
