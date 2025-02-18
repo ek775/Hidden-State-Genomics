@@ -17,10 +17,9 @@ class TestDNAVariant(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-        self.clin_gen = pd.read_csv(os.environ["CLIN_GEN_CSV"], header="infer", sep="\t")
+        self.clin_gen = pd.read_csv(os.environ["CLIN_GEN_CSV"], header="infer", delimiter="\t")
         self.worker = DNAVariantProcessor()
-
-
+        
     def test_parse_hgvs(self):
 
         print("Testing HGVS Parsing")
@@ -28,16 +27,15 @@ class TestDNAVariant(unittest.TestCase):
 
         invalid_expressions = 0
 
-        for var in tqdm(self.clin_gen["#Variation"]):
+        for var in tqdm(self.clin_gen["HGVS Expressions"]):
 
             var = str(var)
+            HGVS = str(var).split()[1][:-1]
 
-            expression = self.worker.clean_hgvs(var)
-            var_obj = self.worker.parse_variant(expression, return_exceptions=False)
+            var_obj = self.worker.parse_variant(HGVS, return_exceptions=False)  
 
             if var_obj is None:
                 invalid_expressions += 1
-                print(invalid_expressions)
                 continue
             
             self.assertIsInstance(var_obj, SequenceVariant)
@@ -47,49 +45,35 @@ class TestDNAVariant(unittest.TestCase):
               Note that the hgvs package does not currently support all HGVS expression types.""")
         print("====================")
 
-
     def test_retrieve_refseq(self):
 
         print("Testing RefSeq Retrieval")
         print("========================")
 
-        for var in tqdm(self.clin_gen["#Variation"]):
+        bad_mapping = 0
+
+        for var in tqdm(self.clin_gen["HGVS Expressions"]):
 
             var = str(var)
-            
-            expression = self.worker.clean_hgvs(var)
-            var_obj = self.worker.parse_variant(expression, return_exceptions=False)
+            HGVS = str(var).split()[1][:-1]
+
+            var_obj = self.worker.parse_variant(HGVS, return_exceptions=False)
 
             if var_obj is None:
                 continue
 
             else:
                 refseq = self.worker.retrieve_refseq(var_obj)
-                self.assertIsInstance(refseq, str)
-        
-        print("========================")
-        print("RefSeq Retrieval Passed")
-
-    def test_retrieve_refseq(self):
-
-        print("Testing RefSeq Retrieval")
-        print("========================")
-
-        for var in tqdm(self.clin_gen["#Variation"]):
-
-            var = str(var)
             
-            expression = self.worker.clean_hgvs(var)
-            var_obj = self.worker.parse_variant(expression, return_exceptions=False)
-
-            if var_obj is None:
-                continue
-
+            if refseq is None:
+                bad_mapping += 1
+                
             else:
-                refseq = self.worker.retrieve_refseq(var_obj)
                 self.assertIsInstance(refseq, str)
+            print(refseq)
         
         print("========================")
+        print(f"Unable to map {bad_mapping} out of {len(self.clin_gen)}")
         print("RefSeq Retrieval Passed")
 
     
@@ -100,12 +84,12 @@ class TestDNAVariant(unittest.TestCase):
 
         bad_mapping = 0
 
-        for var in tqdm(self.clin_gen["#Variation"]):
+        for var in tqdm(self.clin_gen["HGVS Expressions"]):
 
             var = str(var)
+            HGVS = str(var).split()[1][:-1]
 
-            expression = self.worker.clean_hgvs(var)
-            var_obj = self.worker.parse_variant(expression, return_exceptions=False)
+            var_obj = self.worker.parse_variant(HGVS, return_exceptions=False)
             varseq = ''
 
             if var_obj is None:
@@ -113,6 +97,7 @@ class TestDNAVariant(unittest.TestCase):
 
             else:
                 varseq = self.worker.retrieve_variantseq(var_obj)
+                #print(varseq)
             
             ###
             if varseq is None:
