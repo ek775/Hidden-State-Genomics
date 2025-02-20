@@ -153,11 +153,12 @@ def train_sae(
 def train_all_layers(
         # logistics
         silent: bool = False,
+        restart: bool = False,
         parent_model: str = os.environ["NT_MODEL"], 
         SAE_directory: str = "./data/sae", 
         log_dir: str = "./data/train_logs",
         variant_data: str = os.environ["CLIN_VAR_CSV"],
-        early_stop_patience: int = 100,
+        early_stop_patience: int = 50,
         # parameters
         epochs: int = 1000,
         shard_size: int = 256,
@@ -233,8 +234,14 @@ def train_all_layers(
         train_seqs.append(seq)
     print("Beginning Training...")
 
+    # restart logic
+    if restart:
+        start = len(os.listdir(SAE_directory))
+    else:
+        start = 0
+
     # core training loop - may attempt multiprocessing later
-    for layer in range(n_layers):
+    for layer in range(start, n_layers):
 
         sae = train_sae(
             parent_model=model, 
