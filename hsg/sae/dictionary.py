@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 import torch as t
 import torch.nn as nn
 import torch.nn.init as init
+import io
 
 
 class Dictionary(ABC):
@@ -91,7 +92,13 @@ class AutoEncoder(Dictionary, nn.Module):
         """
         Load a pretrained autoencoder from a file.
         """
-        state_dict = t.load(path)
+        try:
+            state_dict = t.load(path)
+            print("Loaded model directly")
+        except:
+            state_dict = t.load(io.FileIO(path))
+            print("Loaded model from buffer")
+
         dict_size, activation_dim = state_dict["encoder.weight"].shape
         autoencoder = AutoEncoder(activation_dim, dict_size)
         autoencoder.load_state_dict(state_dict)
