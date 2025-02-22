@@ -237,6 +237,7 @@ def train_all_layers(
     # restart logic
     if restart:
         start = len(os.listdir(SAE_directory))
+        print()
     else:
         start = 0
 
