@@ -50,9 +50,9 @@ class History():
         """
         Reload the model from disk.
         """
-        model.from_pretrained(f"{self.checkpoint_dir}/best_model{self.layer}.pt")
+        reloaded = model.from_pretrained(f"{self.checkpoint_dir}/best_model{self.layer}.pt")
 
-        return model
+        return reloaded
 
     def update(self, model, train_value, val_value, epoch) -> bool:
         # add new epoch values to history
