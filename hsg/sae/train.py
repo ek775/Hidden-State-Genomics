@@ -125,7 +125,7 @@ def train_sae(
         tracker.update(SAE, train_acc, avg_val_acc, epoch)
         if tracker.early_stop:
             logging.info(f"Early stopping at epoch {epoch}.")
-            SAE = tracker.reload_checkpoint(SAE)
+#            SAE = tracker.reload_checkpoint(SAE)
             train_log_writer.add_text("Best Restored Model:", str(tracker.best_metrics()))
             train_log_writer.flush()
             break
@@ -158,7 +158,7 @@ def train_all_layers(
         SAE_directory: str = "./data/sae", 
         log_dir: str = "./data/train_logs",
         variant_data: str = os.environ["CLIN_VAR_CSV"],
-        early_stop_patience: int = 50,
+        early_stop_patience: int = 100,
         # parameters
         epochs: int = 1000,
         shard_size: int = 256,
