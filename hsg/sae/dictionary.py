@@ -94,10 +94,10 @@ class AutoEncoder(Dictionary, nn.Module):
         """
         try:
             state_dict = t.load(path)
-            print("Loaded model directly")
+#            print("Loaded model directly")
         except:
             state_dict = t.load(io.FileIO(path))
-            print("Loaded model from buffer")
+#            print("Loaded model from buffer")
 
         dict_size, activation_dim = state_dict["encoder.weight"].shape
         autoencoder = AutoEncoder(activation_dim, dict_size)

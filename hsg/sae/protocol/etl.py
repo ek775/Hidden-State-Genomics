@@ -1,7 +1,7 @@
 import torch
 from hsg.sae.interleave import intervention_output
 
-def extract_hidden_states(model, sequence:str, tokenizer, layer:int, device:str) -> torch.Tensor:
+def extract_hidden_states(model, sequence:str, tokenizer, layer:int, device:str, return_logits=False) -> torch.Tensor:
     """
     Extracts the hidden states from the model for a given layer,
     
@@ -36,4 +36,8 @@ def extract_hidden_states(model, sequence:str, tokenizer, layer:int, device:str)
     # Remove padding from activations using the mask tensor
     activations = activations[mask.squeeze()]
 
-    return activations
+    # optionally return logits
+    if return_logits:
+        return activations, logits
+    else:
+        return activations
