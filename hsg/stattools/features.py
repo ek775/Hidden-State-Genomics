@@ -5,6 +5,8 @@ from hsg.sae.dictionary import AutoEncoder
 from tqdm import tqdm
 from umap import UMAP
 import umap.plot as uplot
+import plotly.express as px
+import numpy as np
 
 # built ins
 import os, logging, sys
@@ -29,17 +31,18 @@ class LatentModel(torch.nn.Module):
     
     def forward(self, x: str, return_hidden_states=False, return_logits=False) -> torch.Tensor:
         """
-        Forward pass of the model provides sae latents for a given layer
+        Forward pass of the model provides sae latents for a given layer [latents, hidden_states, logits]
         """
         hidden_states, logits = extract_hidden_states(self.parent_model, x, self.tokenizer, self.layer, self.device, return_logits=True)
-        latents = self.sae(hidden_states)
+        _, latents = self.sae(hidden_states, output_features=True)
+        
         results = [latents]
         if return_hidden_states:
             results.append(hidden_states)
         if return_logits:
             results.append(logits)
-        
-        return results.__iter__()
+
+        return results
 
 # Functions
 def get_latent_model(parent_model_path, layer_idx, sae_path) -> LatentModel:
@@ -55,10 +58,19 @@ def get_latent_model(parent_model_path, layer_idx, sae_path) -> LatentModel:
 
     return latent_model
 
-def generate_umap(embeddings: torch.Tensor, color, n_components:int = 2, **kwargs):
+def generate_umap(embeddings: torch.Tensor, color: np.array, n_components:int = 2, **kwargs):
     """
     Generate a UMAP plot from a tensor of embeddings
     """
     umap = UMAP(n_components=n_components, **kwargs)
     umap_embeddings = umap.fit(embeddings)
-    uplot.points(umap_embeddings, labels=color, width=500, height=500)
+    uplot.points(umap_embeddings, labels=color)
+
+def interactive_umap(embeddings: torch.Tensor, color: np.array, n_components:int = 2, **kwargs):
+    """
+    Generate an interactive UMAP plot from a tensor of embeddings
+    """
+    umap = UMAP(n_components=n_components, **kwargs)
+    umap_embeddings = umap.fit_transform(embeddings)
+    fig = px.scatter(umap_embeddings, x=0, y=1, color=color, title=f"UMAP {kwargs}")
+    fig.show()
