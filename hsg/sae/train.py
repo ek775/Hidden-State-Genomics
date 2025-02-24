@@ -126,8 +126,8 @@ def train_sae(
         if tracker.early_stop:
             logging.info(f"Early stopping at epoch {epoch}.")
 #            SAE = tracker.reload_checkpoint(SAE)
-            train_log_writer.add_text("Best Restored Model:", str(tracker.best_metrics()))
-            train_log_writer.flush()
+#            train_log_writer.add_text("Best Restored Model:", str(tracker.best_metrics()))
+#            train_log_writer.flush()
             break
 
         # logging
