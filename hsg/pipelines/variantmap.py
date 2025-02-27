@@ -13,26 +13,11 @@ class DNAVariantProcessor():
     Class for processing hgvs variant expressions to obtain raw sequences for reference and variant alleles
     """
 
-    def __init__(self, assembly:str = "GRCh37", seqrepo_path:str = "./genome_databases/2024-05-23") -> None:
+    def __init__(self, assembly:str = "GRCh37", seqrepo_path:str = "./genome_databases/2024-12-20") -> None:
         # hgvs tools
         self.parser:Parser = Parser()
         self.assembly_mapper:AssemblyMapper = AssemblyMapper(connect(), assembly_name=assembly, alt_aln_method='splign')
         self.seq_repo:SeqRepo = SeqRepo(seqrepo_path) 
-
-
-    def clean_hgvs(self, raw_hgvs_expression:str) -> str:
-
-        """
-        Processes hgvs expressions with gene name and predicted protein change annotations and removes them for machine readability.
-        """
-
-        # remove gene annotations
-        pattern = r"\([^)]*\)"
-        clean_hgvs = re.sub(pattern, '', raw_hgvs_expression)
-
-        # resulting string
-        return clean_hgvs.strip()
-
 
     def parse_variant(self, hgvs_expression:str, return_exceptions:bool = True ) -> SequenceVariant:
 
@@ -46,43 +31,85 @@ class DNAVariantProcessor():
 
         try:
             parsed_variant = self.parser.parse(hgvs_expression)
-            #print(f"Parsed HGVS Expression: {parsed_variant}")  # Print the parsed result
-            #print(parsed_variant.fill_ref, parsed_variant.format)
-            #print(dir(parsed_variant))
             return parsed_variant
          
         except Exception as e: 
-            # sometimes we want information, sometimes we just want to move on
             if return_exceptions == True:
                 return e
             else:
                 return None
         
-
-    def standardize_expression_type(self, hgvs_ref:SequenceVariant, expression_type:str = ["g","m","c","n","r","p"]):
-
+    def determine_variant_type(self, hgvs_expression: str) -> str:
         """
-        TODO:
-        Standardize hgvs types for proper mapping of refseqs and generation of variant sequences.
-
-        Different hgvs types utilize different coordinate systems and may use non-contiguous indices, 
-        making it difficult to properly modify refseqs to obtain variant sequences.
+        Determines the type of variant based on the HGVS expression.
         """
+        if "del" in hgvs_expression:
+            return "del"
+        elif ">" in hgvs_expression:
+            return "SNP"
+        elif "dup" in hgvs_expression:
+            return "dup"
+        else:
+            return "unknown"
 
-        pass
+    def process_del(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
+        """
+        Processes a deletion by deleting the specified sequence region.
+        """
+        if int(variant_start) == int(variant_end):
+            #print('same')
+            ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2999 : int(variant_end)+2999]
+            var_seq = var_seq = ref_seq[:2998]+ref_seq[2999:]
+            return(var_seq)
+        elif int(variant_start) != int(variant_end):
+            del_len = int(variant_end) - (int(variant_start)-1)
+            add_len = del_len/2
+            if isinstance(add_len, float):
+                lower = (int(add_len))
+                higher = lower +1
+                ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2999 : int(variant_end)+2999]
+                print(ref_seq)
+                var_seq = ref_seq[:2998]+ref_seq[2998+del_len:]
+                print(var_seq)
+            #print(del_len)
+            #print(variant_start)
+            #print(variant_end)
+            ref_seq = self.retrieve_refseq(hgvs_ref)
+        return ref_seq
 
+    def process_snp(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
+        """
+        Processes a SNP by replacing the affected base.
+        """
+        ref_seq = self.retrieve_refseq(hgvs_ref)
+        #print(hgvs_ref)
+        #print(ref_seq[2998])
+        #print(len(ref_seq))
+        alt_nuc = str(hgvs_ref.posedit.edit.alt)
+        var_seq = ref_seq[:2998]+alt_nuc+ref_seq[2999:]
+        #print(var_seq[2998])
+        #print(len(var_seq))
+        return var_seq
+
+    def process_dup(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
+        """
+        Processes a duplication by duplicating the specified sequence region.
+        """
+        print("dup")
+        ref_seq = self.retrieve_refseq(hgvs_ref)
+        return ref_seq
 
     def retrieve_refseq(self, hgvs_ref:SequenceVariant) -> str:
 
         """
         Retrieve reference sequence from seqrepo.
         """
-        print(hgvs_ref)
+
         variant_start: int = hgvs_ref.posedit.pos.start.base
         variant_end: int = hgvs_ref.posedit.pos.end.base
-        seq_ret = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-1 : int(variant_end)+3]
+        seq_ref = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2999 : int(variant_end)+2998]
     
-        return seq_ret
+        return seq_ref
 
 
     def retrieve_variantseq(self, hgvs_ref: SequenceVariant) -> str:
@@ -90,43 +117,18 @@ class DNAVariantProcessor():
         """
         Modifies obtained refseq sequence to obtain the variant sequence
         """
+        var_type = self.determine_variant_type(str(hgvs_ref))
 
         variant_start: int = hgvs_ref.posedit.pos.start.base
-        print("start",variant_start)
         variant_end: int = hgvs_ref.posedit.pos.end.base
-        print("end",variant_end)
 
-        # some variant types may not have a reference or variant allele (i.e. copy number variants)
-        try:
-            ref: str = hgvs_ref.posedit.edit.ref
-            assert ref is not None
-        except:
-            ref:str = ''
+        if var_type == "del":
+            return self.process_del(hgvs_ref, variant_start, variant_end)
+        elif var_type == "SNP":
+            return self.process_snp(hgvs_ref, variant_start, variant_end)
+        elif var_type == "dup":
+            return self.process_dup(hgvs_ref, variant_start, variant_end)
+        else:
+            raise ValueError(f"Unsupported variant type: {variant_type}")
 
-        try:
-            var: str = hgvs_ref.posedit.edit.alt
-            assert var is not None
-        except:
-            var:str = ''
-
-        # ref and var should not both be None
-        if ref == None and var == None:
-            raise ValueError("Reference and Variant alleles cannot both be None")
-
-        # get refseq
-        refseq = self.seq_repo[f"refseq:{hgvs_ref.ac}"]
-        varseq = ''
-
-        # modify the refseq to obtain the variant sequence
-        # TODO: HGVS extracts locations from hgvs expressions without validation. Need to implement some sort of 
-        # coordinate system unification and position validation to reduce mapping errors.
-        try:
-            assert ref == refseq[variant_start:variant_end+1]
-            varseq = refseq[:variant_start] + var + refseq[variant_end:]
-        except:
-            varseq = None
-        
         return varseq
-
-#https://www.ncbi.nlm.nih.gov/nuccore/NM_000277.3
-#https://www.ncbi.nlm.nih.gov/nuccore/NM_000277.2

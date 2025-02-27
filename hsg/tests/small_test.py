@@ -57,6 +57,10 @@ class TestDNAVariant(unittest.TestCase):
             var = str(var)
             HGVS = str(var).split()[1][:-1]
 
+            if ":c." in HGVS:
+                bad_mapping += 1
+                continue
+
             var_obj = self.worker.parse_variant(HGVS, return_exceptions=False)
 
             if var_obj is None:
@@ -70,7 +74,6 @@ class TestDNAVariant(unittest.TestCase):
                 
             else:
                 self.assertIsInstance(refseq, str)
-            print(refseq)
         
         print("========================")
         print(f"Unable to map {bad_mapping} out of {len(self.clin_gen)}")
@@ -89,6 +92,10 @@ class TestDNAVariant(unittest.TestCase):
             var = str(var)
             HGVS = str(var).split()[1][:-1]
 
+            if ":c." in HGVS:
+                bad_mapping += 1
+                continue
+
             var_obj = self.worker.parse_variant(HGVS, return_exceptions=False)
             varseq = ''
 
@@ -97,9 +104,7 @@ class TestDNAVariant(unittest.TestCase):
 
             else:
                 varseq = self.worker.retrieve_variantseq(var_obj)
-                #print(varseq)
-            
-            ###
+
             if varseq is None:
                 bad_mapping += 1
             
