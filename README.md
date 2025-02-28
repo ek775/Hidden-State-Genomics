@@ -33,9 +33,12 @@ seqrepo --root-dir ./genome_databases pull
 
 ```
 # core environment variables
-CLIN_GEN_CSV="~/Hidden-State-Genomics/genome_databases/erepo.tabbed.txt"
-CLIN_VAR_CSV="~/Hidden-State-Genomics/genome_databases/variant_summary.txt"
+CLIN_GEN_CSV="~/Hidden-State-Genomics/data/erepo.tabbed.txt"
+CLIN_VAR_CSV="~/Hidden-State-Genomics/data/variant_summary.txt"
 NT_MODEL="InstaDeepAI/nucleotide-transformer-500m-human-ref"
+GCLOUD_BUCKET="gs://hidden-state-genomics"
+SEQREPO_PATH="./data/2024-05-23"
+REFSEQ_CACHE="./data/refseq_cache.txt"
 ```
 
 - Run unit tests to ensure everything is running smooth

@@ -9,6 +9,10 @@ from hgvs.validator import Validator
 import re
 import os
 
+# load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
@@ -20,6 +24,7 @@ class DNAVariantProcessor():
     """
 
     def __init__(self, assembly:str = "GRCh37", seqrepo_path:str = os.environ["SEQREPO_PATH"]) -> None:
+        # hgvs tools
         self.parser:Parser = Parser()
         self.assembly_mapper:AssemblyMapper = AssemblyMapper(
             connect(), 
