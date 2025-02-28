@@ -27,10 +27,10 @@ class TestDNAVariant(unittest.TestCase):
 
         invalid_expressions = 0
 
-        for var in tqdm(self.clin_gen["HGVS Expressions"]):
+        for var in tqdm(self.clin_gen["#Variation"]):
 
             var = str(var)
-            HGVS = str(var).split()[0][:-1]
+            HGVS = self.worker.clean_hgvs(var)
 
             var_obj = self.worker.parse_variant(HGVS, return_exceptions=False)  
 
@@ -45,73 +45,88 @@ class TestDNAVariant(unittest.TestCase):
               Note that the hgvs package does not currently support all HGVS expression types.""")
         print("====================")
 
-    def test_retrieve_refseq(self):
+#    def test_retrieve_refseq(self):
 
-        print("Testing RefSeq Retrieval")
-        print("========================")
+#        print("Testing RefSeq Retrieval")
+#        print("========================")
 
-        bad_mapping = 0
+#        bad_mapping = 0
 
-        for var in tqdm(self.clin_gen["HGVS Expressions"]):
+#        for var in tqdm(self.clin_gen["#Variation"]):
 
-            var = str(var)
-            HGVS = str(var).split()[1][:-1]
+#            var = str(var)
+#            HGVS = self.worker.clean_hgvs(var)
 
-            if ":c." in HGVS:
-                bad_mapping += 1
-                continue
+#            var_obj = self.worker.parse_variant(HGVS, return_exceptions=False)
 
-            var_obj = self.worker.parse_variant(HGVS, return_exceptions=False)
+#            if var_obj is None:
+#                continue
 
-            if var_obj is None:
-                continue
-
-            else:
-                refseq = self.worker.retrieve_refseq(var_obj)
+#            else:
+#                try:
+#                    var_obj = self.worker.genomic_sequence_projection(var_obj)
+#                except:
+#                    bad_mapping += 1
+#                    continue
+#                refseq = self.worker.retrieve_refseq(var_obj)
             
-            if refseq is None:
-                bad_mapping += 1
+#            if refseq is None:
+#                bad_mapping += 1
                 
-            else:
-                self.assertIsInstance(refseq, str)
+#            else:
+#                self.assertIsInstance(refseq, str)
         
-        print("========================")
-        print(f"Unable to map {bad_mapping} out of {len(self.clin_gen)}")
-        print("RefSeq Retrieval Passed")
+#        print("========================")
+#        print(f"Unable to map {bad_mapping} out of {len(self.clin_gen)}")
+#        print("RefSeq Retrieval Passed")
 
     
-    def test_retrieve_variantseq(self):
+    def test_sequence_retrieval(self):
 
-        print("Testing Variant Sequence Retrieval")
+        print("Testing Reference Sequence Retrieval & Variant Sequence Mapping")
         print("===================================")
 
+        bad_retrieval = 0
         bad_mapping = 0
 
-        for var in tqdm(self.clin_gen["HGVS Expressions"]):
+        for var in tqdm(self.clin_gen["#Variation"]):
 
             var = str(var)
-            HGVS = str(var).split()[1][:-1]
+            HGVS = self.worker.clean_hgvs(var)
 
-            if ":c." in HGVS:
-                bad_mapping += 1
-                continue
-
+            # parse and project the variant
             var_obj = self.worker.parse_variant(HGVS, return_exceptions=False)
+            refseq = ''
             varseq = ''
 
             if var_obj is None:
+                bad_retrieval += 1
                 continue
 
             else:
+                try:
+                    var_obj = self.worker.genomic_sequence_projection(var_obj)
+                except:
+                    bad_retrieval += 1
+                    continue
+                
+                # get our sequences
+                refseq = self.worker.retrieve_refseq(var_obj)
                 varseq = self.worker.retrieve_variantseq(var_obj)
 
+            if refseq is None:
+                bad_retrieval += 1
+                continue
             if varseq is None:
                 bad_mapping += 1
-            
+                continue
             else:
                 self.assertIsInstance(varseq, str)
+                self.assertIsInstance(refseq, str)
 
+        print(f"Unable to retrieve {bad_retrieval} out of {len(self.clin_gen)}")
         print(f"Unable to map {bad_mapping} out of {len(self.clin_gen)}")
+        print(f"Total failures: {bad_retrieval + bad_mapping}")
         print("===================================")
 
 

@@ -4,9 +4,14 @@ from hgvs.dataproviders.uta import connect
 from hgvs.assemblymapper import AssemblyMapper
 from biocommons.seqrepo import SeqRepo
 from hgvs.sequencevariant import SequenceVariant
+from hgvs.normalizer import Normalizer
+from hgvs.validator import Validator
 import re
 import os
 
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
 
 class DNAVariantProcessor():
 
@@ -16,9 +21,28 @@ class DNAVariantProcessor():
 
     def __init__(self, assembly:str = "GRCh37", seqrepo_path:str = os.environ["SEQREPO_PATH"]) -> None:
         self.parser:Parser = Parser()
-        self.assembly_mapper:AssemblyMapper = AssemblyMapper(connect(), assembly_name=assembly, alt_aln_method='splign')
+        self.assembly_mapper:AssemblyMapper = AssemblyMapper(
+            connect(), 
+            normalize=True,
+            assembly_name=assembly, 
+            alt_aln_method='splign'
+        )
         self.seq_repo:SeqRepo = SeqRepo(seqrepo_path) 
 
+
+    def clean_hgvs(self, raw_hgvs_expression:str) -> str:
+
+        """
+        Processes hgvs expressions with gene name and predicted protein change annotations and removes them for machine readability.
+        """
+
+        # remove gene annotations
+        pattern = r"\([^)]*\)"
+        clean_hgvs = re.sub(pattern, '', raw_hgvs_expression)
+
+        # resulting string
+        return clean_hgvs.strip()
+    
 
     def parse_variant(self, hgvs_expression:str, return_exceptions:bool = True ) -> SequenceVariant:
 
@@ -38,14 +62,50 @@ class DNAVariantProcessor():
             if return_exceptions == True:
                 return e
             else:
-                parsed_variant = None
-                
-            
+                parsed_variant = None     
+
+
+    def genomic_sequence_projection(self, var_obj:SequenceVariant) -> SequenceVariant:
+
+        """
+        Uses the Assembly Mapper to project the variant to genomic coordinates and normalize the variant according to HGVS standards.
+
+        Returns a SequenceVariant object.
+        1. Determine the coordinate type of the variant (g, c, n, t).
+        2. Use the AssemblyMapper to project the variant to genomic coordinates.
+        3. Normalize the variant using the AssemblyMapper.
+        4. Return the projected and normalized variant.
+        5. If the coordinate type is not supported, raise a ValueError.
+        """
+
+        # type checking
+        assert isinstance(var_obj, SequenceVariant), "Input must be a SequenceVariant object"
+
+        # determine the coordinate type of the variant
+        coord_type = var_obj.type
+        projection = None
+
+        # project the variant to genomic coordinates (normalization set on class initialization)
+        if coord_type == "g":
+            projection = var_obj
+        elif coord_type == "c":
+            projection = self.assembly_mapper.c_to_g(var_obj)
+        elif coord_type == "n":
+            projection = self.assembly_mapper.n_to_g(var_obj)
+        elif coord_type == "t":
+            projection = self.assembly_mapper.t_to_g(var_obj)
+        else:
+            raise ValueError(f"Unsupported coordinate type: {coord_type}")
+
+        return projection      
+          
         
     def determine_variant_type(self, hgvs_expression: str) -> str:
+
         """
         Determines the type of variant based on the HGVS expression.
         """
+
         if "del" in hgvs_expression:
             return "del"
         elif ">" in hgvs_expression:
@@ -57,9 +117,11 @@ class DNAVariantProcessor():
         
 
     def process_del(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
+
         """
         Processes a deletion by deleting the specified sequence region.
         """
+
         if int(variant_start) == int(variant_end):
             ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2999 : int(variant_end)+2999]
             var_seq = var_seq = ref_seq[:2998]+ref_seq[2999:]
@@ -73,9 +135,11 @@ class DNAVariantProcessor():
         
 
     def process_snp(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
+
         """
         Processes a SNP by replacing the affected base.
         """
+
         ref_seq = self.retrieve_refseq(hgvs_ref)
         alt_nuc = str(hgvs_ref.posedit.edit.alt)
         var_seq = ref_seq[:2998]+alt_nuc+ref_seq[2999:]
@@ -83,9 +147,11 @@ class DNAVariantProcessor():
     
 
     def process_dup(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
+
         """
         Processes a duplication by duplicating the specified sequence region.
         """
+
         if int(variant_start) == int(variant_end):
             ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2998 : int(variant_end)+2998]
             var_seq = ref_seq[:2998]+ref_seq[2997]+ref_seq[2998:]
