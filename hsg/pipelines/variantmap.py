@@ -5,6 +5,7 @@ from hgvs.assemblymapper import AssemblyMapper
 from biocommons.seqrepo import SeqRepo
 from hgvs.sequencevariant import SequenceVariant
 import re
+import os
 
 
 class DNAVariantProcessor():
@@ -13,10 +14,11 @@ class DNAVariantProcessor():
     Class for processing hgvs variant expressions to obtain raw sequences for reference and variant alleles
     """
 
-    def __init__(self, assembly:str = "GRCh37", seqrepo_path:str = "./genome_databases/2024-12-20") -> None:
+    def __init__(self, assembly:str = "GRCh37", seqrepo_path:str = os.environ["SEQREPO_PATH"]) -> None:
         self.parser:Parser = Parser()
         self.assembly_mapper:AssemblyMapper = AssemblyMapper(connect(), assembly_name=assembly, alt_aln_method='splign')
         self.seq_repo:SeqRepo = SeqRepo(seqrepo_path) 
+
 
     def parse_variant(self, hgvs_expression:str, return_exceptions:bool = True ) -> SequenceVariant:
 
@@ -36,7 +38,9 @@ class DNAVariantProcessor():
             if return_exceptions == True:
                 return e
             else:
-                return None
+                parsed_variant = None
+                
+            
         
     def determine_variant_type(self, hgvs_expression: str) -> str:
         """
@@ -50,6 +54,7 @@ class DNAVariantProcessor():
             return "dup"
         else:
             return "unknown"
+        
 
     def process_del(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
         """
@@ -65,6 +70,7 @@ class DNAVariantProcessor():
             ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2999 : int(variant_end)+2999]
             var_seq = ref_seq[:2998]+ref_seq[2998+del_len:]
             return(var_seq)
+        
 
     def process_snp(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
         """
@@ -74,6 +80,7 @@ class DNAVariantProcessor():
         alt_nuc = str(hgvs_ref.posedit.edit.alt)
         var_seq = ref_seq[:2998]+alt_nuc+ref_seq[2999:]
         return var_seq
+    
 
     def process_dup(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
         """
@@ -92,6 +99,7 @@ class DNAVariantProcessor():
             var_seq = ref_seq[:mid_ref+dup_len]+dup_seq+ref_seq[mid_ref+dup_len:]
             trimed_var_seq = self.trim_string_odd(var_seq, 5997)
             return trimed_var_seq
+
 
     def retrieve_refseq(self, hgvs_ref:SequenceVariant) -> str:
 
@@ -123,9 +131,8 @@ class DNAVariantProcessor():
         elif var_type == "dup":
             return self.process_dup(hgvs_ref, variant_start, variant_end)
         else:
-            raise ValueError(f"Unsupported variant type: {variant_type}")
-
-        return varseq
+            raise ValueError(f"Unsupported variant type: {var_type}")
+        
 
     def trim_string_odd(self, s: str, target_length: int) -> str:
         current_length = len(s)

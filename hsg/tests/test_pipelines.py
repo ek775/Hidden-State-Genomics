@@ -30,7 +30,7 @@ class TestDNAVariant(unittest.TestCase):
         for var in tqdm(self.clin_gen["HGVS Expressions"]):
 
             var = str(var)
-            HGVS = str(var).split()[1][:-1]
+            HGVS = str(var).split()[0][:-1]
 
             var_obj = self.worker.parse_variant(HGVS, return_exceptions=False)  
 
