@@ -30,7 +30,8 @@ class DNAVariantProcessor():
             connect(), 
             normalize=True,
             assembly_name=assembly, 
-            alt_aln_method='splign'
+            alt_aln_method='splign',
+            replace_reference=True
         )
         self.seq_repo:SeqRepo = SeqRepo(seqrepo_path) 
 
