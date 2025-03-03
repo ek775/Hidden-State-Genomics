@@ -121,8 +121,11 @@ def train_sae(
         avg_val_loss = sum(val_loss) / len(val_loss)
         avg_val_acc = sum(val_acc) / len(val_acc)
 
+        # wait until L1 penalty annealing to attempt early stopping
+        if epoch >= l1_annealing_steps:
+            tracker.update(SAE, train_acc, avg_val_acc, epoch)
+        
         # checkpoint logic
-        tracker.update(SAE, train_acc, avg_val_acc, epoch)
         if tracker.early_stop:
             logging.info(f"Early stopping at epoch {epoch}.")
 #            SAE = tracker.reload_checkpoint(SAE)

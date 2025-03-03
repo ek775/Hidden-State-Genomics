@@ -191,6 +191,7 @@ class DNAVariantProcessor():
         """
         Modifies obtained refseq sequence to obtain the variant sequence
         """
+
         var_type = self.determine_variant_type(str(hgvs_ref))
 
         variant_start: int = hgvs_ref.posedit.pos.start.base
@@ -207,6 +208,13 @@ class DNAVariantProcessor():
         
 
     def trim_string_odd(self, s: str, target_length: int) -> str:
+
+        """
+        Trims a sequence to a target length from both ends. 
+
+        If the sequence length is odd, the extra base will be removed from the end of the sequence.
+        """
+        
         current_length = len(s)
     
         if target_length >= current_length:
