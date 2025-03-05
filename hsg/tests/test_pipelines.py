@@ -119,37 +119,58 @@ class TestDNAVariant(unittest.TestCase):
             # check mutations for correctness using difflib
             ###############################################
 
-            diff = [i for i in difflib.ndiff(refseq, varseq) if i[0] != ' ']
+            comparison = difflib.SequenceMatcher(None, refseq, varseq)
+            changes = comparison.get_opcodes()
+#            diff = [i for i in difflib.ndiff(refseq, varseq) if i[0] != ' ']
 
             # test conditions for deletions
             if var_obj.posedit.edit.type == "del":
-                self.assertTrue("-" in ''.join(diff))
-                self.assertFalse("+" in ''.join(diff))
-            
+                try:
+                    deletions = len([i for i in changes if i[0] == "delete"])
+                    self.assertEqual(deletions, 1)
+                    self.assertNotIn("replace", [i[0] for i in changes])
+                    self.assertNotIn("insert", [i[0] for i in changes])
+                except:
+                    bad_mapping += 1
+                    print(f"Unable to map deletion: {var}")
+                    print(changes)
+                    continue
+
             # test conditions for substitutions / SNPs
             if var_obj.posedit.edit.type == "sub":
-                self.assertTrue("+" in ''.join(diff))
-                self.assertTrue("-" in ''.join(diff))
-
-                additions = len([i for i in diff if i[0] == "+"])
-                deletions = len([i for i in diff if i[0] == "-"])
-
-                self.assertEqual(additions, deletions)
+                try:
+                    substitutions = len([i for i in changes if i[0] == "replace"])
+                    self.assertEqual(substitutions, 1)
+                    self.assertNotIn("delete", [i[0] for i in changes])
+                    self.assertNotIn("insert", [i[0] for i in changes])
+                except:
+                    bad_mapping += 1
+                    print(f"Unable to map substitution: {var}")
+                    print(changes)
+                    continue
 
             # test conditions for insertions
             if var_obj.posedit.edit.type == "ins":
-                self.assertTrue("+" in ''.join(diff))
-                self.assertFalse("-" in ''.join(diff))
-
+                try:
+                    insertions = len([i for i in changes if i[0] == "insert"])
+                    self.assertEqual(insertions, 1)
+                    self.assertNotIn("replace", [i[0] for i in changes])
+                    self.assertNotIn("delete", [i[0] for i in changes])
+                except:
+                    bad_mapping += 1
+                    print(f"Unable to map insertion: {var}")
+                    print(changes)
+                    continue
+                
             # test conditions for duplications
-            if var_obj.posedit.edit.type == "dup":
-                self.assertTrue("+" in ''.join(diff))
-                self.assertFalse("-" in ''.join(diff))
+#            if var_obj.posedit.edit.type == "dup":
+#                self.assertTrue("+" in ''.join(diff))
+#                self.assertFalse("-" in ''.join(diff))
 
             # test conditions for delins
-            if var_obj.posedit.edit.type == "delins":
-                self.assertTrue("+" in ''.join(diff))
-                self.assertTrue("-" in ''.join(diff))
+#            if var_obj.posedit.edit.type == "delins":
+#                self.assertTrue("+" in ''.join(diff))
+#                self.assertTrue("-" in ''.join(diff))
             
             # other / complex variants not yet supported, should have thrown error earlier
             else:

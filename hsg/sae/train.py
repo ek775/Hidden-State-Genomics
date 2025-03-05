@@ -192,13 +192,10 @@ def train_all_layers(
     if silent:
         import warnings
         warnings.filterwarnings("ignore")
-        logging.disable(logging.INFO)
-        logging.disable(logging.WARNING)
-        logging.disable(logging.DEBUG)
-        logging.basicConfig(level=logging.ERROR)
+        logging.basicConfig(level=logging.INFO)
         logging.getLogger("main").addHandler(logging.StreamHandler(sys.stdout))
     else:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.WARNING)
         logging.getLogger("main").addHandler(logging.StreamHandler(sys.stdout))
 
     # gather objects
