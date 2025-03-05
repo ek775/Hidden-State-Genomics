@@ -6,7 +6,7 @@ ClinGen is starting to explore the utility of machine learning tools for their c
 
 - Download the ClinGen and ClinVar datasets from the google drive shared folder
 
-    - *I placed these inside the genome_databases directory, but you can place them anywhere that's convenient for you*
+    - *I placed these inside the data directory, but you can place them anywhere that's convenient for you*
 
 - Install the dependencies in an environment of your choice
 
@@ -23,7 +23,7 @@ pip install -e [this repository]
     - *full documentation here: https://hgvs.readthedocs.io/en/stable/installation.html#installing-seqrepo-optional*
 
 ```
-seqrepo --root-dir ./genome_databases pull
+seqrepo --root-dir ./data pull
 ```
 
 - Add a ".env" file in the root directory to specify directories, etc.
