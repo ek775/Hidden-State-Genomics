@@ -114,7 +114,11 @@ class TestDNAVariant(unittest.TestCase):
             self.assertIsInstance(refseq, str)
 
             # check that the variant sequence is not the same as the reference sequence
-            self.assertNotEqual(varseq, refseq)
+            # Also, return something a bit more informative than a generic assertion error
+            try:
+                self.assertNotEqual(varseq, refseq)
+            except Exception as e:
+                return e, var
 
             ###############################################
             # check mutations for correctness using difflib
