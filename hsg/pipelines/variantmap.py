@@ -122,68 +122,80 @@ class DNAVariantProcessor():
             return "unknown"
         
 
-    def process_del(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
+    def process_del(self, hgvs_ref: SequenceVariant, variant_start: int, variant_end: int) -> str:
 
         """
         Processes a deletion by deleting the specified sequence region.
         """
 
-        if int(variant_start) == int(variant_end):
-            ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2999 : int(variant_end)+2999]
-            var_seq = var_seq = ref_seq[:2998]+ref_seq[2999:]
-            return(var_seq)
-
-        elif int(variant_start) != int(variant_end):
-            del_len = int(variant_end) - (int(variant_start)-1)
-            ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2999 : int(variant_end)+2999]
-            var_seq = ref_seq[:2998]+ref_seq[2998+del_len:]
-            return(var_seq)
+        del_len = int(variant_end) - (int(variant_start)-1)
+        ref_seq, offset = self.retrieve_refseq(hgvs_ref, return_offset=True)
+        var_seq = ref_seq[:offset]+ref_seq[offset+del_len:]
+        return(var_seq)
         
 
-    def process_snp(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
+    def process_snp(self, hgvs_ref: SequenceVariant, variant_start: int, variant_end: int) -> str:
 
         """
         Processes a SNP by replacing the affected base.
         """
 
-        ref_seq = self.retrieve_refseq(hgvs_ref)
+        ref_seq, offset = self.retrieve_refseq(hgvs_ref, return_offset=True)
         alt_nuc = str(hgvs_ref.posedit.edit.alt)
-        var_seq = ref_seq[:2998]+alt_nuc+ref_seq[2999:]
+        var_seq = ref_seq[:offset]+alt_nuc+ref_seq[offset:]
         return var_seq
     
 
-    def process_dup(self, hgvs_ref: str, variant_start: int, variant_end: int) -> str:
+    def process_dup(self, hgvs_ref: SequenceVariant, variant_start: int, variant_end: int) -> str:
 
         """
         Processes a duplication by duplicating the specified sequence region.
         """
 
-        if int(variant_start) == int(variant_end):
-            ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2998 : int(variant_end)+2998]
-            var_seq = ref_seq[:2998]+ref_seq[2997]+ref_seq[2998:]
-            return ref_seq
-        elif int(variant_start) != int(variant_end):
-            dup_len = int(variant_end) - (int(variant_start)-1)
-            half_dup_len = dup_len/2
-            ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start-(2999+half_dup_len)) : int(variant_end+(2999-half_dup_len))]
-            mid_ref = int(len(ref_seq)/2)
-            dup_seq = ref_seq[mid_ref:mid_ref+dup_len]
-            var_seq = ref_seq[:mid_ref+dup_len]+dup_seq+ref_seq[mid_ref+dup_len:]
-            trimed_var_seq = self.trim_string_odd(var_seq, 5997)
-            return trimed_var_seq
+        dup_length = int(variant_end) - (int(variant_start)-1)
+
+        ref_seq, offset = self.retrieve_refseq(hgvs_ref, return_offset=True)
+        var_seq = ref_seq[:offset]+ref_seq[offset-dup_length:offset]+ref_seq[offset:]
+
+        return var_seq
+
+#        if int(variant_start) == int(variant_end):
+#            ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2998 : int(variant_end)+2998]
+#            var_seq = ref_seq[:2998]+ref_seq[2997]+ref_seq[2998:]
+#            return ref_seq
+#        elif int(variant_start) != int(variant_end):
+#            dup_len = int(variant_end) - (int(variant_start)-1)
+#            half_dup_len = dup_len/2
+#            ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start-(2999+half_dup_len)) : int(variant_end+(2999-half_dup_len))]
+#            mid_ref = int(len(ref_seq)/2)
+#            dup_seq = ref_seq[mid_ref:mid_ref+dup_len]
+#            var_seq = ref_seq[:mid_ref+dup_len]+dup_seq+ref_seq[mid_ref+dup_len:]
+#            trimed_var_seq = self.trim_string_odd(var_seq, 5997)
+#            return trimed_var_seq
 
 
-    def retrieve_refseq(self, hgvs_ref:SequenceVariant) -> str:
+    def retrieve_refseq(self, hgvs_ref:SequenceVariant, return_offset:bool = False) -> str:
 
         """
         Retrieve reference sequence from seqrepo.
         """
+        # Find offset for context window (avoid index out of bounds)
+        dist = 0
+        start = max(int(hgvs_ref.posedit.pos.start.base)-3000, 0)
+        if start == 0:
+            dist = abs(int(hgvs_ref.posedit.pos.start.base)-3000)
+            
+        # gimme as much sequence as possible, center the variant in the context window
+        end = min(int(hgvs_ref.posedit.pos.end.base)+3000+dist, len(str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])))
 
-        variant_start: int = hgvs_ref.posedit.pos.start.base
-        variant_end: int = hgvs_ref.posedit.pos.end.base
-        seq_ref = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2999 : int(variant_end)+2998]
-    
-        return seq_ref
+        offset = 3000-dist # offset for context window
+
+        seq_ref = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[start:end]
+
+        if return_offset:
+            return seq_ref, offset
+        else:
+            return seq_ref
 
 
     def retrieve_variantseq(self, hgvs_ref: SequenceVariant) -> str:

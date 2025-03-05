@@ -104,7 +104,8 @@ class TestDNAVariant(unittest.TestCase):
                 continue
             try:    
                 varseq = self.worker.retrieve_variantseq(var_obj)
-            except:
+            except Exception as e:
+                print(e)
                 bad_mapping += 1
                 continue
 
@@ -121,15 +122,32 @@ class TestDNAVariant(unittest.TestCase):
 
             comparison = difflib.SequenceMatcher(None, refseq, varseq)
             changes = comparison.get_opcodes()
-#            diff = [i for i in difflib.ndiff(refseq, varseq) if i[0] != ' ']
 
             # test conditions for deletions
             if var_obj.posedit.edit.type == "del":
                 try:
-                    deletions = len([i for i in changes if i[0] == "delete"])
-                    self.assertEqual(deletions, 1)
-                    self.assertNotIn("replace", [i[0] for i in changes])
-                    self.assertNotIn("insert", [i[0] for i in changes])
+                    taga, i1a, i2a, j1a, j2a = changes[0] # deletion is centered in the context window
+                    self.assertEqual(taga, "equal")
+                    self.assertEqual(i1a, j1a)
+                    self.assertEqual(i2a, j2a)
+
+                    # difflib identifies the deletion as a replacement due to our context window
+                    tagb, i1b, i2b, j1b, j2b = changes[1]
+
+                    self.assertEqual(tagb, "replace")
+                    self.assertEqual(i1b, j1b)
+
+                    # contiguous changes
+                    self.assertEqual(i2a, i1b)
+                    self.assertEqual(j2a, j1b)
+
+                    # check deletion sizes
+                    del_size = var_obj.posedit.pos.end.base - var_obj.posedit.pos.start.base                       
+                    self.assertEqual(i2b, j2b + del_size)
+                    
+                    # match trailing refseq
+                    self.assertEqual(varseq[j2b:], refseq[j2b + del_size:])
+                        
                 except:
                     bad_mapping += 1
                     print(f"Unable to map deletion: {var}")
@@ -156,22 +174,33 @@ class TestDNAVariant(unittest.TestCase):
                     self.assertEqual(insertions, 1)
                     self.assertNotIn("replace", [i[0] for i in changes])
                     self.assertNotIn("delete", [i[0] for i in changes])
+
+                    # check insertion size
+                    ins_size = var_obj.posedit.pos.start.base - var_obj.posedit.pos.end.base
+                    insertions = [i for i in changes if i[0] == "insert"]
+                    i1, i2, j1, j2 = insertions[0][1:]
+                    self.assertEqual(i2, i1 + ins_size)
                 except:
                     bad_mapping += 1
                     print(f"Unable to map insertion: {var}")
                     print(changes)
                     continue
-                
-            # test conditions for duplications
-#            if var_obj.posedit.edit.type == "dup":
-#                self.assertTrue("+" in ''.join(diff))
-#                self.assertFalse("-" in ''.join(diff))
 
-            # test conditions for delins
-#            if var_obj.posedit.edit.type == "delins":
-#                self.assertTrue("+" in ''.join(diff))
-#                self.assertTrue("-" in ''.join(diff))
-            
+            # test conditions for duplications
+            if var_obj.posedit.edit.type == "dup":
+                try:
+                    duplication = [i for i in changes if i[0] == "insert"] # tagged as insertion
+                    i1, i2, j1, j2 = duplication[0][1:]
+                    dup_size = j2-j1
+                    stated_dup_size = var_obj.posedit.pos.end.base - var_obj.posedit.pos.start.base
+                    self.assertEqual(dup_size, stated_dup_size)
+                    self.assertEqual(varseq[j1:j2], refseq[i1-dup_size:i1])
+                except:
+                    bad_mapping += 1
+                    print(f"Unable to map duplication: {var}")
+                    print(changes)
+                    continue
+
             # other / complex variants not yet supported, should have thrown error earlier
             else:
                 continue
