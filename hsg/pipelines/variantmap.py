@@ -130,7 +130,7 @@ class DNAVariantProcessor():
 
         del_len = int(variant_end) - (int(variant_start)-1)
         ref_seq, offset = self.retrieve_refseq(hgvs_ref, return_offset=True)
-        var_seq = ref_seq[:offset-1]+ref_seq[(offset+del_len)-1:] # start idx is inclusive, end idx is exclusive
+        var_seq = ref_seq[:offset]+ref_seq[(offset+del_len):] # start idx is inclusive, end idx is exclusive
         return(var_seq)
         
 
@@ -156,7 +156,7 @@ class DNAVariantProcessor():
 
         ref_seq, offset = self.retrieve_refseq(hgvs_ref, return_offset=True)
         
-        var_seq = ref_seq[:offset]+ref_seq[offset-dup_length:offset-1]+ref_seq[offset:] # start idx is inclusive, end idx is exclusive
+        var_seq = ref_seq[:offset]+ref_seq[offset:offset+dup_length]+ref_seq[offset:] # start idx is inclusive, end idx is exclusive
 
         return var_seq
 

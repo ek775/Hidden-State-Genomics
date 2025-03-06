@@ -118,7 +118,8 @@ class TestDNAVariant(unittest.TestCase):
             try:
                 self.assertNotEqual(varseq, refseq)
             except Exception as e:
-                return e, var
+                print(var)
+                raise e 
 
             ###############################################
             # check mutations for correctness using difflib
@@ -146,7 +147,7 @@ class TestDNAVariant(unittest.TestCase):
                     self.assertEqual(j2a, j1b)
 
                     # check deletion sizes
-                    del_size = var_obj.posedit.pos.end.base - var_obj.posedit.pos.start.base                       
+                    del_size = var_obj.posedit.pos.end.base - var_obj.posedit.pos.start.base +1                    
                     self.assertEqual(i2b, j2b + del_size)
                     
                     # match trailing refseq
