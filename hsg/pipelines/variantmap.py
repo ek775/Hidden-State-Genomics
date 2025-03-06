@@ -23,14 +23,14 @@ class DNAVariantProcessor():
     Class for processing hgvs variant expressions to obtain raw sequences for reference and variant alleles
     """
 
-    def __init__(self, assembly:str = "GRCh37", seqrepo_path:str = os.environ["SEQREPO_PATH"]) -> None:
+    def __init__(self, assembly:str = "GRCh38.p14", seqrepo_path:str = os.environ["SEQREPO_PATH"]) -> None:
         # hgvs tools
         self.parser:Parser = Parser()
         self.assembly_mapper:AssemblyMapper = AssemblyMapper(
             connect(), 
-            normalize=True,
+            normalize=False,
             assembly_name=assembly, 
-            alt_aln_method='splign',
+            alt_aln_method='blat',
             replace_reference=True
         )
         self.seq_repo:SeqRepo = SeqRepo(seqrepo_path) 
@@ -132,7 +132,17 @@ class DNAVariantProcessor():
         ref_seq, offset = self.retrieve_refseq(hgvs_ref, return_offset=True)
         var_seq = ref_seq[:offset]+ref_seq[(offset+del_len):] # start idx is inclusive, end idx is exclusive
         return(var_seq)
-        
+    
+#        if int(variant_start) == int(variant_end):
+#            ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2999 : int(variant_end)+2999]
+#            var_seq = var_seq = ref_seq[:2998]+ref_seq[2999:]
+#            return(var_seq)
+
+#        elif int(variant_start) != int(variant_end):
+#            del_len = int(variant_end) - (int(variant_start)-1)
+#            ref_seq = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2999 : int(variant_end)+2999]
+#            var_seq = ref_seq[:2998]+ref_seq[2998+del_len:]
+#            return(var_seq)    
 
     def process_snp(self, hgvs_ref: SequenceVariant, variant_start: int, variant_end: int) -> str:
 
@@ -142,9 +152,13 @@ class DNAVariantProcessor():
 
         ref_seq, offset = self.retrieve_refseq(hgvs_ref, return_offset=True)
         alt_nuc = str(hgvs_ref.posedit.edit.alt)
-        var_seq = ref_seq[:offset]+alt_nuc+ref_seq[offset:] # start idx is inclusive, end idx is exclusive
+        var_seq = ref_seq[:offset]+alt_nuc+ref_seq[offset+1:] # start idx is inclusive, end idx is exclusive
         return var_seq
-    
+
+#        ref_seq = self.retrieve_refseq(hgvs_ref)
+#        alt_nuc = str(hgvs_ref.posedit.edit.alt)
+#        var_seq = ref_seq[:2998]+alt_nuc+ref_seq[2999:]
+#        return var_seq
 
     def process_dup(self, hgvs_ref: SequenceVariant, variant_start: int, variant_end: int) -> str:
 
@@ -180,24 +194,35 @@ class DNAVariantProcessor():
         """
         Retrieve reference sequence from seqrepo.
         """
+
+        full = str(self.seq_repo[hgvs_ref.ac])
+
+#        print(full[hgvs_ref.posedit.pos.start.base-1], ":", hgvs_ref.posedit.edit.ref) # verify zero index offset
+#        print(full[hgvs_ref.posedit.pos.start.base-3:hgvs_ref.posedit.pos.start.base+3]) # verify zero index offset
+
         # Find offset for context window (avoid index out of bounds)
         dist = 0
-        start = max(int(hgvs_ref.posedit.pos.start.base)-3000, 0)
+        start = max(int(hgvs_ref.posedit.pos.start.base-1)-3000, 0)
         if start == 0:
-            dist = abs(int(hgvs_ref.posedit.pos.start.base)-3000)
+            dist = abs(int(hgvs_ref.posedit.pos.start.base-1)-3000)
             
         # gimme as much sequence as possible, center the variant in the context window
-        end = min(int(hgvs_ref.posedit.pos.end.base)+3000+dist, len(str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])))
+        end = min(int(hgvs_ref.posedit.pos.end.base-1)+3000+dist, len(full))
+
+        seq_ref = full[start:end]
 
         offset = 3000-dist # offset for context window
-
-        seq_ref = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[start:end]
 
         if return_offset:
             return seq_ref, offset
         else:
             return seq_ref
 
+#        variant_start: int = hgvs_ref.posedit.pos.start.base
+#        variant_end: int = hgvs_ref.posedit.pos.end.base
+#        seq_ref = str(self.seq_repo[f"refseq:{hgvs_ref.ac}"])[int(variant_start)-2999 : int(variant_end)+2998]
+    
+#        return seq_ref
 
     def retrieve_variantseq(self, hgvs_ref: SequenceVariant) -> str:
 
@@ -207,8 +232,9 @@ class DNAVariantProcessor():
 
         var_type = self.determine_variant_type(str(hgvs_ref))
 
-        variant_start: int = hgvs_ref.posedit.pos.start.base
-        variant_end: int = hgvs_ref.posedit.pos.end.base
+        # Correct for zero index offset
+        variant_start: int = hgvs_ref.posedit.pos.start.base-1
+        variant_end: int = hgvs_ref.posedit.pos.end.base-1
 
         if var_type == "del":
             return self.process_del(hgvs_ref, variant_start, variant_end)

@@ -130,6 +130,7 @@ class TestDNAVariant(unittest.TestCase):
 
             # test conditions for deletions
             if var_obj.posedit.edit.type == "del":
+
                 try:
                     taga, i1a, i2a, j1a, j2a = changes[0] # deletion is centered in the context window
                     self.assertEqual(taga, "equal")
@@ -153,27 +154,36 @@ class TestDNAVariant(unittest.TestCase):
                     # match trailing refseq
                     self.assertEqual(varseq[j2b:], refseq[j2b + del_size:])
                         
-                except:
+                except Exception as e:
                     bad_mapping += 1
                     print(f"Unable to map deletion: {var}")
                     print(changes)
+                    print(e)
                     continue
 
             # test conditions for substitutions / SNPs
             if var_obj.posedit.edit.type == "sub":
+
                 try:
                     substitutions = len([i for i in changes if i[0] == "replace"])
                     self.assertEqual(substitutions, 1)
                     self.assertNotIn("delete", [i[0] for i in changes])
                     self.assertNotIn("insert", [i[0] for i in changes])
-                except:
+
+                    # match substitution base
+                    i1, i2, j1, j2 = changes[1][1:]
+                    self.assertEqual(var_obj.posedit.edit.ref, refseq[i1])
+
+                except Exception as e:
                     bad_mapping += 1
                     print(f"Unable to map substitution: {var}")
                     print(changes)
+                    print(e)
                     continue
 
             # test conditions for insertions
             if var_obj.posedit.edit.type == "ins":
+
                 try:
                     insertions = len([i for i in changes if i[0] == "insert"])
                     self.assertEqual(insertions, 1)
@@ -185,25 +195,35 @@ class TestDNAVariant(unittest.TestCase):
                     insertions = [i for i in changes if i[0] == "insert"]
                     i1, i2, j1, j2 = insertions[0][1:]
                     self.assertEqual(i2, i1 + ins_size)
-                except:
+
+                except Exception as e:
                     bad_mapping += 1
                     print(f"Unable to map insertion: {var}")
                     print(changes)
+                    print(e)
                     continue
 
             # test conditions for duplications
             if var_obj.posedit.edit.type == "dup":
+
                 try:
-                    duplication = [i for i in changes if i[0] == "insert"] # tagged as insertion
+                    duplication = [i for i in changes if i[0] == "replace"] # tagged as replacement
+
+                    # check size of duplication
                     i1, i2, j1, j2 = duplication[0][1:]
-                    dup_size = j2-j1
-                    stated_dup_size = var_obj.posedit.pos.end.base - var_obj.posedit.pos.start.base
+                    dup_size = j2-i2
+                    stated_dup_size = (var_obj.posedit.pos.end.base - var_obj.posedit.pos.start.base) + 1
                     self.assertEqual(dup_size, stated_dup_size)
-                    self.assertEqual(varseq[j1:j2], refseq[i1-dup_size:i1])
-                except:
+
+                    # attempt to match duplicated sequence
+                    self.assertEqual(varseq[i1:i1+dup_size], varseq[i1-dup_size:i1], "Duplication does not mirror")
+                    self.assertEqual(varseq[i1:i1+dup_size], refseq[i1-dup_size:i1], "Duplication does not match reference")
+
+                except Exception as e:
                     bad_mapping += 1
                     print(f"Unable to map duplication: {var}")
                     print(changes)
+                    print(e)
                     continue
 
             # other / complex variants not yet supported, should have thrown error earlier
