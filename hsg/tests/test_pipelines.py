@@ -22,6 +22,9 @@ class TestDNAVariant(unittest.TestCase):
 
 
     def test_parse_hgvs(self):
+        """
+        Testing the parsing of HGVS expressions using the clingen variant names.
+        """
 
         print("Testing HGVS Parsing")
         print("====================")
@@ -48,6 +51,25 @@ class TestDNAVariant(unittest.TestCase):
 
     
     def test_sequence_retrieval(self):
+        """
+        Testing the retrieval of reference and variant sequences from a given variant. Uses the clingen dataset's
+        HGVS Expressions column to test.
+
+        Steps:
+
+        (1) Pulls a random sample of 1000 variants from the clingen dataset and tests the retrieval of reference and variant
+        sequences, preferring to use genomic coordinates where possible.
+
+        (2) Attempts to parse and project the variant using the hgvs package.
+
+        (3) Attempts to retrieve the reference sequence from biocommons.seqrepo
+
+        (4) Attempts to mutate the reference sequence to the variant sequence per its HGVS expression.
+
+        (5) Run a series of tests to ensure that edits are being made correctly using difflib.
+
+        (6) Report on the number of failures and the types of failures encountered.
+        """
 
         print("Testing Reference Sequence Retrieval & Variant Sequence Mapping")
         print("===================================")
