@@ -20,6 +20,9 @@ load_dotenv()
 class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
 
     def test_tokenizer_load(self):
+        """
+        Test that the tokenizer loads correctly
+        """
 
         print("Testing Tokenizer Load")
         print("======================")
@@ -30,6 +33,9 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
     
 
     def test_model_load(self):
+        """
+        Test that we can load a nucleotide transformer foundation model
+        """
 
         print("Testing Model Load")
         print("==================")
@@ -40,6 +46,9 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
 
 
     def test_dummy_encode(self):
+        """
+        Test the forward method of the model combined with the tokenizer for basic functionality.
+        """
 
         print("Testing Dummy Encoding")
         print("======================")
@@ -84,6 +93,9 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
 
 
     def test_nnsight_interleave(self):
+        """
+        Test that nnsight constructs an intervention graph and allows us to modify hidden layer activations.
+        """
 
         print("Testing NNsight Interleave")
         print("==========================")
@@ -112,6 +124,9 @@ class Test_NT_2_5B_MultiSpecies(unittest.TestCase):
 class Test_Dictionary_Objects(unittest.TestCase):
 
     def test_autoencoder_instance(self):
+        """
+        Test initialization of our AutoEncoder class
+        """
 
         print("Testing AutoEncoder Initialization")
         print("=================================")
