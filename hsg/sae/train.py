@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # built ins
-import os, logging, sys
+import os, logging, sys, multiprocessing
 from random import shuffle
 
 # external libs
@@ -31,6 +31,7 @@ def train_sae(
         train_seqs: list,
         layer_idx: int, 
         log_dir: str, 
+        SAE_directory: str,
         expansion_factor: int, 
         device:str, 
         num_epochs: int,
@@ -39,7 +40,7 @@ def train_sae(
         l1_penalty: float,
         l1_annealing_steps: int,
         early_stop_patience: int = 100,
-        silent: bool = False
+        silent: bool = False,
     ) -> AutoEncoder:
     """
     Train a SAE on the output of a layer of a parent model.
@@ -86,7 +87,7 @@ def train_sae(
     train_shards = [train_shards[i:i + shard_size] for i in range(0, len(train_shards), shard_size)]
 
     val_shards = train_seqs[len(train_seqs)-split:]
-    val_shards = [val_shards[i:i + shard_size] for i in range(0, len(val_shards), shard_size)]
+    val_shards = [val_shards[i:i + shard_size//2] for i in range(0, len(val_shards), shard_size//2)]
 
     del train_seqs # memory management
 
@@ -124,13 +125,10 @@ def train_sae(
         # wait until L1 penalty annealing to attempt early stopping
         if epoch >= l1_annealing_steps:
             tracker.update(SAE, train_acc, avg_val_acc, epoch)
-        
+
         # checkpoint logic
         if tracker.early_stop:
             logging.info(f"Early stopping at epoch {epoch}.")
-#            SAE = tracker.reload_checkpoint(SAE)
-#            train_log_writer.add_text("Best Restored Model:", str(tracker.best_metrics()))
-#            train_log_writer.flush()
             break
 
         # logging
@@ -149,6 +147,33 @@ def train_sae(
         
     # wrap up
     train_log_writer.close()
+
+    # save trained SAEs
+    save_path = os.path.join(SAE_directory, f"layer_{layer_idx}.pt")
+
+    if not os.path.exists(SAE_directory):
+        os.makedirs(SAE_directory)
+        torch.save(SAE.state_dict(), save_path)
+
+    # check for overwrites
+    elif os.path.exists(save_path):
+
+        logging.info(f"Layer {layer_idx} already exists. attempting to save copy.")
+
+        # if we find more than 10 copies of a trained SAE, ok to start overwriting.
+        for i in range(1, 11):
+            if not os.path.exists(os.path.join(SAE_directory, f"layer_{layer_idx}({i}).pt")):
+                torch.save(SAE.state_dict(), os.path.join(SAE_directory, f"layer_{layer_idx}({i}).pt"))
+                break
+            elif i == 10:
+                logging.info(f"Too many copies of layer {layer_idx} exist. Overwriting.")
+                torch.save(SAE.state_dict(), save_path)
+            else:
+                continue
+    # save or overwrite
+    else:
+        torch.save(SAE.state_dict(), save_path)
+
     return SAE
 
 #####################################################################################################
@@ -156,12 +181,14 @@ def train_sae(
 def train_all_layers(
         # logistics
         silent: bool = False,
+        verbose: bool = False,
         restart: bool = False,
         parent_model: str = os.environ["NT_MODEL"], 
         SAE_directory: str = "./data/sae", 
         log_dir: str = "./data/train_logs",
         variant_data: str = os.environ["CLIN_VAR_CSV"],
         early_stop_patience: int = 100,
+        num_workers: int = 1,
         # parameters
         epochs: int = 1000,
         shard_size: int = 256,
@@ -175,11 +202,15 @@ def train_all_layers(
     Command line interface to train a series of SAEs on the output of each layer of a parent model. Uses GPU if available.
 
     Args:
-        silent (bool): If True, suppresses logging output. Useful for training on a server.
+        silent (bool): If True, eliminates progress bars.
+        verbose (bool): If True, reads out warnings and debugging information.
+        restart (bool): If True, will attempt to restart training from the last saved SAE.
         parent_model (str): The name of the parent model to be loaded from huggingface.
         SAE_directory (str): The directory to save the trained SAEs to.
         log_dir (str): The directory to save the training logs to.
         variant_data (str): The path to the ClinVar VCF file to be used for training.
+        early_stop_patience (int): The number of epochs to wait before early stopping.
+        num_workers (int): The number of workers to use for multiprocessing.
         epochs (int): The number of epochs to train for.
         shard_size (int): Number of sequences to train on per epoch.
         learning_rate (float): The learning rate to use for training.
@@ -189,13 +220,13 @@ def train_all_layers(
     """
 
     # logging
-    if silent:
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG)
+        logging.getLogger("main").addHandler(logging.StreamHandler(sys.stdout))
+    else:
         import warnings
         warnings.filterwarnings("ignore")
         logging.basicConfig(level=logging.INFO)
-        logging.getLogger("main").addHandler(logging.StreamHandler(sys.stdout))
-    else:
-        logging.basicConfig(level=logging.WARNING)
         logging.getLogger("main").addHandler(logging.StreamHandler(sys.stdout))
 
     # gather objects
@@ -208,7 +239,7 @@ def train_all_layers(
 
     print("===============================================================")
     print(f"Preparing to extract features from: {parent_model}")
-    print(f"Training {n_layers} SAEs on {len(accessions)} sequences.")
+    print(f"Training {n_layers} SAEs on {len(accessions)} sequences, using {num_workers} workers.")
     print(f"Logs will be written to: {log_dir}")
     print(f"SAEs will be saved to: {SAE_directory}\n")
     print("--- Parameters --- \n")
@@ -228,7 +259,7 @@ def train_all_layers(
             proxy = seq_repo[f"refseq:{acc}"]
             seq = proxy.__str__()
         except KeyError:
-            logging.warning(f"Accession {acc} not found in SeqRepo. Skipping.")
+            logging.debug(f"Accession {acc} not found in SeqRepo. Skipping.")
             continue
 
         train_seqs.append(seq)
@@ -241,15 +272,51 @@ def train_all_layers(
     else:
         start = 0
 
-    # core training loop - may attempt multiprocessing later
-    for layer in range(start, n_layers):
 
+    ### Core Training Loop ###
+
+    # Multithreaded BS with CUDA
+#    pool = multiprocessing.Semaphore(num_workers)
+#    running = []
+    
+#    for layer in range(start, n_layers):
+#        pool.acquire()
+#        process = multiprocessing.Process(
+#            target=train_sae,
+#            args=[
+#                pool,
+#                model,
+#                tokenizer,
+#                train_seqs,
+#                layer,
+#                log_dir,
+#                SAE_directory,
+#                dict_expansion_factor,
+#                device,
+#                epochs,
+#                shard_size,
+#                learning_rate,
+#                l1_penalty,
+#                l1_annealing_steps,
+#                early_stop_patience,
+#                silent
+#            ]
+#        )
+#        running.append(process)
+#        process.start()
+
+#    for process in running:
+#        process.join()
+
+    # Normal Sequential Zen
+    for layer in range(start, n_layers):
         sae = train_sae(
             parent_model=model, 
             train_seqs=train_seqs,
             tokenizer=tokenizer,
             layer_idx=layer, 
             log_dir=log_dir, 
+            SAE_directory=SAE_directory,
             expansion_factor=dict_expansion_factor,
             device=device,
             num_epochs=epochs,
@@ -261,32 +328,8 @@ def train_all_layers(
             early_stop_patience=early_stop_patience
         )
 
-        # save trained SAEs
-        save_path = os.path.join(SAE_directory, f"layer_{layer}.pt")
-
-        if not os.path.exists(SAE_directory):
-            os.makedirs(SAE_directory)
-            torch.save(sae.state_dict(), save_path)
-
-        # check for overwrites
-        elif os.path.exists(save_path):
-
-            logging.info(f"Layer {layer} already exists. attempting to save copy.")
-
-            # if we find more than 10 copies of a trained SAE, ok to start overwriting.
-            for i in range(1, 11):
-                if not os.path.exists(os.path.join(SAE_directory, f"layer_{layer}({i}).pt")):
-                    torch.save(sae.state_dict(), os.path.join(SAE_directory, f"layer_{layer}({i}).pt"))
-                    break
-                elif i == 10:
-                    logging.info(f"Too many copies of layer {layer} exist. Overwriting.")
-                    torch.save(sae.state_dict(), save_path)
-                else:
-                    continue
-        # save or overwrite
-        else:
-            torch.save(sae.state_dict(), save_path)
 
 ### run module as cmdline tool ###
 if __name__ == "__main__":
+    multiprocessing.set_start_method("spawn")
     tapify(train_all_layers)
