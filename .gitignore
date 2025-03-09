@@ -167,6 +167,7 @@ data/2024-12-20/
 # clingen and clinvar datasets have similar issue
 data/erepo.tabbed.txt
 data/variant_summary.txt
+data/clingen_w_seqs.csv
 
 # models are generally over the 100MB limit for github (free tier)
 checkpoints/
