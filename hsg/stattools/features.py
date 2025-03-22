@@ -29,16 +29,22 @@ class LatentModel(torch.nn.Module):
         if self.parent_model.device != self.device:
             self.parent_model.to(self.device)
     
-    def forward(self, x: str, return_hidden_states=False, return_logits=False) -> torch.Tensor:
+    def forward(self, x: str, return_hidden_states=False, return_reconstructions=False, return_logits=False) -> torch.Tensor:
         """
-        Forward pass of the model provides sae latents for a given layer [latents, hidden_states, logits]
+        Forward pass of the model provides sae latents for a given layer + optional arguments: [hidden_states, reconstructions, logits]
+
+        Where hidden_states are the hidden states of the parent model at the specified layer,
+        reconstructions are the SAE reconstructions of the hidden states, and 
+        logits are the final output of the parent model.
         """
         hidden_states, logits = extract_hidden_states(self.parent_model, x, self.tokenizer, self.layer, self.device, return_logits=True)
-        _, latents = self.sae(hidden_states, output_features=True)
+        reconstructions, latents = self.sae(hidden_states, output_features=True)
         
         results = [latents]
         if return_hidden_states:
             results.append(hidden_states)
+        if return_reconstructions:
+            results.append(reconstructions)
         if return_logits:
             results.append(logits)
 

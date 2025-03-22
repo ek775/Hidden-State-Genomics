@@ -40,7 +40,7 @@ class History():
         index = self.history["epoch"].index(self.best_epoch)
         metrics = {
             "train": self.history["train"][index],
-            "val": self.history["train"][index],
+            "val": self.history["val"][index],
             "epoch": self.history["epoch"][index]
         }
 
