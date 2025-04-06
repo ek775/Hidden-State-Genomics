@@ -93,18 +93,24 @@ class FullLatentModel(torch.nn.Module):
     
     Has a larger memory footprint and slower inference time.
     """
-    def __init__(self, saedir: Path, parent_model: EsmForMaskedLM, tokenizer: EsmTokenizer, device: str):
+    def __init__(self, saedir: Path, huggingface_model: str, device: str = None):
         """
         Args:
+
             saedir (Path): Path to the directory containing the SAEs.
-            parent_model (EsmForMaskedLM): The parent model to use.
-            tokenizer (EsmTokenizer): The tokenizer to use.
-            device (str): The device to use for computation (e.g., "cuda" or "cpu").
+
+            huggingface_model (str): Huggingface model name / path.
+
+            device (str, optional): Device to use for the model. If None, pytorch will attempt to use the GPU if available. 
+                Consider setting this to "cpu" if your GPU does not have sufficient memory to load the model.
         """
         super().__init__()
-        self.parent_model = parent_model
-        self.tokenizer = tokenizer
-        self.device = device
+
+        if device is None:
+            self.parent_model, self.tokenizer, self.device = load_model(huggingface_model)
+        else:
+            self.device = device
+            self.parent_model, self.tokenizer, _ = load_model(huggingface_model)
 
         # load all SAEs
         self.saes = {}
@@ -130,7 +136,7 @@ class FullLatentModel(torch.nn.Module):
             Form of the dictionary:
             {
                 "logits": torch.Tensor,
-                "hidden_states": torch.Tensor,
+                "hidden_states": tuple[torch.Tensor],
                 "tokens": list[str],
                 "latents": {
                     "layer": torch.Tensor
@@ -166,9 +172,10 @@ class FullLatentModel(torch.nn.Module):
         )
 
         results["logits"] = base_prediction.logits.cpu()
-        results["hidden_states"] = base_prediction.hidden_states.cpu()
+        results["hidden_states"] = base_prediction.hidden_states
         results["tokens"] = tokens
         results["latents"] = {}
+        results["reconstructions"] = {}
 
         # get the SAE latents for each layer
         for sae in self.saes:
