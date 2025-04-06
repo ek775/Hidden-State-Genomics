@@ -1,4 +1,6 @@
 import torch
+from transformers.models.esm.modeling_esm import EsmForMaskedLM
+from transformers.models.esm.tokenization_esm import EsmTokenizer
 from hsg.pipelines.hidden_state import load_model
 from hsg.sae.protocol.etl import extract_hidden_states
 from hsg.sae.dictionary import AutoEncoder
@@ -10,6 +12,7 @@ import numpy as np
 
 # built ins
 import os, logging, sys
+from pathlib import Path
 
 # Objects
 class LatentModel(torch.nn.Module):
@@ -84,6 +87,101 @@ class LatentModel(torch.nn.Module):
         else:
             return latents
 
+class FullLatentModel(torch.nn.Module):
+    """
+    Integrates multiple SAEs for each layer of the parent model to allow for feature extraction from all layers simultaneously.
+    
+    Has a larger memory footprint and slower inference time.
+    """
+    def __init__(self, saedir: Path, parent_model: EsmForMaskedLM, tokenizer: EsmTokenizer, device: str):
+        """
+        Args:
+            saedir (Path): Path to the directory containing the SAEs.
+            parent_model (EsmForMaskedLM): The parent model to use.
+            tokenizer (EsmTokenizer): The tokenizer to use.
+            device (str): The device to use for computation (e.g., "cuda" or "cpu").
+        """
+        super().__init__()
+        self.parent_model = parent_model
+        self.tokenizer = tokenizer
+        self.device = device
+
+        # load all SAEs
+        self.saes = {}
+        for layer in range(len(self.parent_model.esm.encoder.layer)):
+            sae_path = os.path.join(saedir, f"layer_{layer}.pt")
+            self.saes[str(layer)] = AutoEncoder.from_pretrained(sae_path)
+
+        # use the gpu or cpu as appropriate
+        self.to(self.device)
+        self.parent_model.to(self.device)
+        for sae in self.saes:
+            self.saes[sae].to(self.device)
+
+    def forward(self, x: str) -> dict:
+        """
+        Forward pass of the model provides the next token LM prediction for a given sequence,
+        as well as the SAE latents for each layer and the original tokens for interpretability.
+        Args:
+            x (str): The input sequence.
+        Returns:
+            dict: A dictionary containing the logits, hidden states, tokens, and latents for each layer.
+
+            Form of the dictionary:
+            {
+                "logits": torch.Tensor,
+                "hidden_states": torch.Tensor,
+                "tokens": list[str],
+                "latents": {
+                    "layer": torch.Tensor
+                }
+                "reconstructions": {
+                    "layer": torch.Tensor
+                }
+            }
+        """
+        results = {}
+
+        # tokenization & preprocessing
+        token_embeddings = self.tokenizer.encode_plus(
+            x,
+            return_tensors="pt",
+            padding="max_length",
+            truncation=True,
+            max_length=self.tokenizer.model_max_length
+        )["input_ids"]
+        tokens = self.tokenizer.convert_ids_to_tokens(token_embeddings.squeeze())
+
+        mask = token_embeddings != self.tokenizer.pad_token_id
+
+        token_embeddings = token_embeddings.to(self.device)
+        mask = mask.to(self.device)
+
+        # get output of the parent model
+        base_prediction = self.parent_model(
+            token_embeddings,
+            attention_mask=mask,
+            encoder_attention_mask=mask,
+            output_hidden_states=True
+        )
+
+        results["logits"] = base_prediction.logits.cpu()
+        results["hidden_states"] = base_prediction.hidden_states.cpu()
+        results["tokens"] = tokens
+        results["latents"] = {}
+
+        # get the SAE latents for each layer
+        for sae in self.saes:
+            hidden_states = base_prediction.hidden_states[int(sae)]
+            reconstructions, features = self.saes[sae](hidden_states, output_features=True)
+            results["latents"][sae] = features.cpu()
+            results["reconstructions"][sae] = reconstructions.cpu()
+
+        # All Done!
+        return results
+
+
+#################################################################################
 # Functions
 def get_latent_model(parent_model_path, layer_idx, sae_path) -> LatentModel:
     """
