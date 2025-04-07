@@ -1,5 +1,6 @@
 import torch
 import os
+import numpy as np
 
 
 def binarize_features(features: torch.Tensor, threshold: float = 1.0) -> torch.Tensor:
@@ -101,8 +102,34 @@ def bed_to_array(filepath: str):
 
 
 
-def cross_correlation(features, annotation_array):
-    pass
+def cross_correlation(features: np.array, annotation_array: np.array) -> np.ndarray:
+    """
+    Computes the normalized cross-correlation between two binary 1D arrays of equal length.
+    """
+    assert len(features) == len(annotation_array), "Features and annotation array must be of the same length."
+    assert features.ndim == 1, "Features must be a 1D array."
+    assert annotation_array.ndim == 1, "Annotation array must be a 1D array."
+
+    # Compute the cross-correlation
+    cross_corr = np.correlate(features, annotation_array, mode='full')
+    # Normalize the cross-correlation
+    cross_corr = cross_corr / ( np.sqrt(np.sum(features**2) * np.sum(annotation_array**2)) )
+
+    return cross_corr
+
+
+
+def xcorr_pearson(features: np.array, annotation_array: np.array) -> np.float64:
+    """
+    Computes the Pearson correlation coefficient between two binary 1D arrays of equal length.
+    """
+    assert len(features) == len(annotation_array), "Features and annotation array must be of the same length."
+    assert features.ndim == 1, "Features must be a 1D array."
+    assert annotation_array.ndim == 1, "Annotation array must be a 1D array."
+
+    # Compute the Pearson correlation coefficient
+    corr = np.corrcoef(features, annotation_array)[0, 1]
+    return corr
 
 
 
