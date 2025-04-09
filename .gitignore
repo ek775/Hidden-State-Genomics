@@ -164,11 +164,18 @@ cython_debug/
 # seqrepo download is too large to be included in the repository
 genome_databases/clin_gen-12-2024.tabbed.txt
 genome_databases/clin_var-12-2024.tabbed.txt
-genome_databases/2024-05-23/
-genome_databases/2024-12-20/
+data/2024-05-23/
+data/2024-12-20/
 # clingen and clinvar datasets have similar issue
-genome_databases/erepo.tabbed.txt
-genome_databases/erepo.tabbed.small.txt
-genome_databases/variant_summary.txt
+data/erepo.tabbed.txt
+data/variant_summary.txt
+data/clingen_w_seqs.csv
+
+# models are generally over the 100MB limit for github (free tier)
+checkpoints/
+
+# generally we don't need to save jupyter notebooks in the repository
+*.ipynb
+
 # ignore the test SQL database
 genome_databases/genbank_data.db

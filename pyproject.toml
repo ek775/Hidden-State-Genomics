@@ -29,6 +29,13 @@ dependencies = [
     "google-cloud-bigquery==3.27.0",
     "typed-argument-parser==1.10.1",
     "python-dotenv==1.0.1",
+    "pyspark==3.5.4",
+    "gcsfs==2024.12.0",
+    "tensorboard==2.19.0",
+    "jupyter",
+    "datashader",
+    "bokeh",
+    "holoviews",
 ]
 
 [build-system]
