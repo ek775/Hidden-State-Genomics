@@ -219,3 +219,9 @@ def interactive_umap(embeddings: torch.Tensor, color: np.array, n_components:int
     umap_embeddings = umap.fit_transform(embeddings)
     fig = px.scatter(umap_embeddings, x=0, y=1, color=color, title=f"UMAP {kwargs}")
     fig.show()
+
+def normalize(features: torch.Tensor) -> torch.Tensor:
+    """
+    Normalize a set of features based on the maximum value so that all activations fall between zero and one.
+    """
+    pass

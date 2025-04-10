@@ -1,6 +1,8 @@
 import torch
 import os
 import numpy as np
+from biocommons.seqrepo import SeqRepo
+from dotenv import load_dotenv
 
 
 def binarize_features(features: torch.Tensor, threshold: float = 1.0) -> torch.Tensor:
@@ -75,9 +77,7 @@ def features_to_bed(features: torch.Tensor, tokens: list[str], feature_id: str, 
     Convert features to BED format and write to file.
     """
 
-    header =    f"browser position chr{chromosome}:{start}-{end}" + '\n' +\
-                "browser hide all" + '\n' +\
-                f"""track name="{feature_id}" description="{description}" """
+    header = f"""track name="{feature_id}" description="{description}" """
 
     alignments = construct_alignments(features, tokens, chromosome, start)
 
@@ -94,11 +94,60 @@ def features_to_bed(features: torch.Tensor, tokens: list[str], feature_id: str, 
 
 
 
-def bed_to_array(filepath: str):
+def bed_to_array(filepath: str) -> dict:
     """
     Reads an annotation track from a BED file and constructs a 1D array for comparison against features.
+
+    Args:
+        filepath (str): Path to the BED file.
+
+    Returns:
+        dict: A dictionary where keys are chromosome names and values are 1D arrays representing the annotations.
+
+        Dictionary format: {chromosome name: str, annotations: np.array([0,1], dtype=np.int8)}
     """
-    pass
+    load_dotenv()
+
+    df = pd.read_csv(filepath, sep="\t", comment="t", header=None)
+    header = ['chrom', 'chromStart', 'chromEnd', 'name', 'score', 'strand', 'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts']
+    df.columns = header[:len(df.columns)]
+
+    # create arrays based on the indices provided in the bed file
+    results = {}
+    for chr in df["chrom"].unique():
+        results[chr] = np.empty(0)
+
+    # read df row by row, construct arrays
+    prev_end = None
+    for row in df.iterrows():
+        chrom = row[1]["chrom"]
+        start = row[1]["chromStart"]
+        end = row[1]["chromEnd"]
+
+        # pad zeros from chr index zero to annotation start
+        if start != 0 and len(results[chrom]) == 0:
+            results[chrom] = np.zeros(start)
+            prev_end = None
+
+        # pad zeros from the last annotation end to the next start
+        if prev_end is not None and start != prev_end:
+            results[chrom] = np.append(results[chrom], np.zeros(start - prev_end))
+
+        # append ones for the annotation
+        results[chrom] = np.append(results[chrom], np.ones(end - start))
+
+        # cache the previous end for next iteration
+        prev_end = end
+
+    # use seqrepo to get the chromosome length and pad zeros to the end
+    seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
+    for key in results.keys():
+        seq_length = len(str(seqrepo[f"GRCh38:{key}"]))
+        if len(results[key]) < seq_length:
+            results[key] = np.append(results[key], np.zeros(seq_length - len(results[key])))
+
+    # return the arrays
+    return results
 
 
 
@@ -132,8 +181,10 @@ def xcorr_pearson(features: np.array, annotation_array: np.array) -> np.float64:
     return corr
 
 
-
+##################################################################################################################
 # Testing to make sure the functions work as expected
+##################################################################################################################
+
 if __name__ == "__main__":
 
     print("Testing cross-correlation functions...")
@@ -147,6 +198,7 @@ if __name__ == "__main__":
     import torch
     import pandas as pd
     from tqdm import tqdm
+    import matplotlib.pyplot as plt
 
     from hsg.pipelines.variantmap import DNAVariantProcessor
     from hsg.stattools.features import *
@@ -155,7 +207,7 @@ if __name__ == "__main__":
     load_dotenv()
 
     layer = 23
-    extractor = get_latent_model(os.environ["NT_MODEL"], layer_idx=layer, sae_path=f"/home/ek224/Downloads/hidden-state-genomics/sae/layer_{layer}.pt")
+    extractor = get_latent_model(os.environ["NT_MODEL"], layer_idx=layer, sae_path=f"/home/ek224/Hidden-State-Genomics/checkpoints/hidden-state-genomics/ef8/sae/layer_{layer}.pt")
 
     # load clingen dataset
     df = pd.read_csv(os.environ["CLIN_GEN_CSV"], header="infer", sep="\t")
@@ -247,3 +299,10 @@ if __name__ == "__main__":
         features_to_bed(features=selected_feature, tokens=token_sets[i], feature_id=f"feature_{i}", chromosome=chromosome, 
                         start=var_objs[i].posedit.pos.start.base-refseqs[i][1], end=var_objs[i].posedit.pos.end.base+refseqs[i][1], 
                         filepath=f"feature_{i}.bed", description="Feature description")
+        
+        print(f"Aligned Chromosome Feature Vectors for {i}:")
+        features = bed_to_array(filepath=f"feature_{i}.bed")
+        print(features)
+        print(f"Cross-Correlation for {i} against random array:")
+        random_array = np.random.randint(0, 2, size=len(features[f"chr{chromosome}"]))
+        print("Pearson Cross-Correlation:", xcorr_pearson(features[f"chr{chromosome}"], random_array))
