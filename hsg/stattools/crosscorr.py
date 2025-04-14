@@ -1,8 +1,10 @@
 import torch
 import os
 import numpy as np
+import pandas as pd
 from biocommons.seqrepo import SeqRepo
 from dotenv import load_dotenv
+from tqdm import tqdm
 
 
 def binarize_features(features: torch.Tensor, threshold: float = 1.0) -> torch.Tensor:
@@ -104,40 +106,52 @@ def bed_to_array(filepath: str) -> dict:
     Returns:
         dict: A dictionary where keys are chromosome names and values are 1D arrays representing the annotations.
 
-        Dictionary format: {chromosome name: str, annotations: np.array([0,1], dtype=np.int8)}
+        Dictionary format: {chromosome name: str, annotations: np.array}
     """
     load_dotenv()
 
-    df = pd.read_csv(filepath, sep="\t", comment="t", header=None)
-    header = ['chrom', 'chromStart', 'chromEnd', 'name', 'score', 'strand', 'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts']
-    df.columns = header[:len(df.columns)]
-
-    # create arrays based on the indices provided in the bed file
     results = {}
-    for chr in df["chrom"].unique():
-        results[chr] = np.empty(0)
 
-    # read df row by row, construct arrays
-    prev_end = None
-    for row in df.iterrows():
-        chrom = row[1]["chrom"]
-        start = row[1]["chromStart"]
-        end = row[1]["chromEnd"]
+    with open(filepath, "r") as f:
+        print(f"Reading BED file: {filepath}")
 
-        # pad zeros from chr index zero to annotation start
-        if start != 0 and len(results[chrom]) == 0:
-            results[chrom] = np.zeros(start)
-            prev_end = None
+        prev_end = None
 
-        # pad zeros from the last annotation end to the next start
-        if prev_end is not None and start != prev_end:
-            results[chrom] = np.append(results[chrom], np.zeros(start - prev_end))
+        for line in tqdm(f.readlines()):
+            # ignore header
+            if not line.startswith("chr"):
+                continue
+            # ignore empty lines
+            if line.strip() == "":
+                continue
+            # split line into columns
+            elements = line.strip().split("\t")
 
-        # append ones for the annotation
-        results[chrom] = np.append(results[chrom], np.ones(end - start))
+            # unpack only core 3 elements for now
+            # TODO: add support for score and other params
+            chrome, chromStart, chromEnd = elements[:3]
+            chromStart = int(chromStart)
+            chromEnd = int(chromEnd)
 
-        # cache the previous end for next iteration
-        prev_end = end
+            # add chromosome to results if not already present
+            if chrome not in results.keys():
+                results[chrome] = np.empty(0)
+                prev_end = None
+
+            # pad zeros from chr index zero to annotation start
+            if chromStart != 0 and len(results[chrome]) == 0:
+                results[chrome] = np.zeros(chromStart)
+                prev_end = None
+
+            # pad zeros from the last annotation end to the next start
+            if prev_end is not None and chromStart != prev_end:
+                results[chrome] = np.append(results[chrome], np.zeros(chromStart - prev_end))
+
+            # append ones for the annotation
+            results[chrome] = np.append(results[chrome], np.ones(chromEnd - chromStart))
+
+            # cache the previous end for next iteration
+            prev_end = chromEnd
 
     # use seqrepo to get the chromosome length and pad zeros to the end
     seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
