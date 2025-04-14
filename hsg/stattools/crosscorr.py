@@ -135,20 +135,20 @@ def bed_to_array(filepath: str) -> dict:
 
             # add chromosome to results if not already present
             if chrome not in results.keys():
-                results[chrome] = np.empty(0)
+                results[chrome] = []
                 prev_end = None
 
-            # pad zeros from chr index zero to annotation start
+            # first entry, pad zeros from chr index zero to annotation start
             if chromStart != 0 and len(results[chrome]) == 0:
-                results[chrome] = np.zeros(chromStart)
+                results[chrome] = [0 for _ in range(chromStart)]
                 prev_end = None
 
             # pad zeros from the last annotation end to the next start
             if prev_end is not None and chromStart != prev_end:
-                results[chrome] = np.append(results[chrome], np.zeros(chromStart - prev_end))
+                results[chrome].extend([0 for _ in range(chromStart - prev_end)])
 
             # append ones for the annotation
-            results[chrome] = np.append(results[chrome], np.ones(chromEnd - chromStart))
+            results[chrome].extend([1 for _ in range(chromStart, chromEnd)])
 
             # cache the previous end for next iteration
             prev_end = chromEnd
@@ -158,7 +158,9 @@ def bed_to_array(filepath: str) -> dict:
     for key in results.keys():
         seq_length = len(str(seqrepo[f"GRCh38:{key}"]))
         if len(results[key]) < seq_length:
-            results[key] = np.append(results[key], np.zeros(seq_length - len(results[key])))
+            results[key].extend([0 for _ in range(len(results[key]), seq_length)])
+        # convert to numpy array
+        results[key] = np.array(results[key])
 
     # return the arrays
     return results
