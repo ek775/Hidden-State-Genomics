@@ -1,0 +1,10 @@
+Source: UCSC Table Browser 
+URL: https://genome.ucsc.edu/cgi-bin/hgTables
+Clade: Mammal
+Genome: Human
+Assembly: GRCh38/hg38
+Group: Regulation
+Track: RefSeq Func Elems
+Table: refSeqFuncElems
+Region: Genome
+

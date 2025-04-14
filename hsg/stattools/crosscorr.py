@@ -28,6 +28,7 @@ def construct_alignments(features: torch.Tensor, tokens: list[str], chromosome: 
 
     Args:
         features (torch.Tensor): The binarized input features as a 1d array.
+        tokens (list[str]): The list of tokens representing the sequence. Used to ensure proper alignment.
         chromosome (int): The chromosome number.
         start (int): The starting position of the features.
 
@@ -98,7 +99,7 @@ def features_to_bed(features: torch.Tensor, tokens: list[str], feature_id: str, 
 
 def bed_to_array(filepath: str) -> dict:
     """
-    Reads an annotation track from a BED file and constructs a 1D array for comparison against features.
+    Reads a single-track BED file and constructs a 1D array for comparison against features.
 
     Args:
         filepath (str): Path to the BED file.
