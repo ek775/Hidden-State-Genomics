@@ -117,7 +117,7 @@ def bed_to_array(filepath: str) -> dict:
 
         prev_end = None
 
-        for line in tqdm(f.readlines()):
+        for line in tqdm(f):
             # ignore header
             if not line.startswith("chr"):
                 continue
@@ -135,8 +135,11 @@ def bed_to_array(filepath: str) -> dict:
 
             # add chromosome to results if not already present
             if chrome not in results.keys():
-                results[chrome] = []
-                prev_end = None
+                if chrome[3:] not in range(1, 23) and chrome[3:] not in ["X","Y","M"]:
+                    continue
+                else:
+                    results[chrome] = []
+                    prev_end = None
 
             # first entry, pad zeros from chr index zero to annotation start
             if chromStart != 0 and len(results[chrome]) == 0:
@@ -154,9 +157,14 @@ def bed_to_array(filepath: str) -> dict:
             prev_end = chromEnd
 
     # use seqrepo to get the chromosome length and pad zeros to the end
+    print("Packaging Annotation Arrays...")
+
     seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
-    for key in results.keys():
+
+    for key in tqdm(results.keys()):
+
         seq_length = len(str(seqrepo[f"GRCh38:{key}"]))
+
         if len(results[key]) < seq_length:
             results[key].extend([0 for _ in range(len(results[key]), seq_length)])
         # convert to numpy array
