@@ -1,17 +1,14 @@
 import torch
-from transformers.models.esm.modeling_esm import EsmForMaskedLM
-from transformers.models.esm.tokenization_esm import EsmTokenizer
 from hsg.pipelines.hidden_state import load_model
 from hsg.sae.protocol.etl import extract_hidden_states
 from hsg.sae.dictionary import AutoEncoder
-from tqdm import tqdm
 from umap import UMAP
 import umap.plot as uplot
 import plotly.express as px
 import numpy as np
 
 # built ins
-import os, logging, sys
+import os
 from pathlib import Path
 
 # Objects
@@ -192,7 +189,14 @@ class FullLatentModel(torch.nn.Module):
 # Functions
 def get_latent_model(parent_model_path, layer_idx, sae_path) -> LatentModel:
     """
-    Abstraction for easy loading of latent models
+    Abstraction for easy loading of latent models.
+
+    Args:
+        parent_model_path (str): Path to the parent model.
+        layer_idx (int): Layer index for the parent model.
+        sae_path (str): Path to the SAE model.
+    Returns:
+        LatentModel: A LatentModel object.
     """
 
     parent_model, tokenizer, device = load_model(parent_model_path)
