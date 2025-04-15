@@ -3,14 +3,16 @@ from tqdm import tqdm
 from dotenv import load_dotenv
 
 import pandas as pd
+from biocommons.seqrepo import SeqRepo
 
 from hsg.stattools.features import get_latent_model
 from hsg.stattools.crosscorr import construct_alignments, binarize_features, bed_to_array, features_to_bed, cross_correlation, xcorr_pearson
 
 import os
 
-
+##################################################################################################################################
 # functions
+###################################################################################################################################
 def read_bed_file(bed_file: str) -> pd.DataFrame:
     """
     Read a BED file and return a DataFrame.
@@ -75,18 +77,53 @@ def read_bed_file(bed_file: str) -> pd.DataFrame:
 
         return df
 
+def get_sequences_from_dataframe(df: pd.DataFrame, seqrepo: SeqRepo) -> list[str]:
+    """
+    Get sequences from a DataFrame using SeqRepo.
+    
+    Args:
+        df (pd.DataFrame): DataFrame containing the BED file data.
+        seqrepo (SeqRepo): SeqRepo object for fetching sequences.
+        
+    Returns:
+        list: List of sequences.
+    """
+    sequences = []
+    for _, row in df.iterrows():
+        chrom = row['chrom']
+        start = row['chromStart']
+        end = row['chromEnd']
+        seq = seqrepo.fetch(namespace="GRCh38", alias=chrom, start=start, end=end)
+        sequences.append(seq)
+    
+    return sequences
 
+#################################################################################################################################
 # main
+#################################################################################################################################
 def main(data_path: str,):
 
+    seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
     model = get_latent_model(os.environ["NT_MODEL"], layer_idx=23, 
                              sae_path="/home/ek224/Hidden-State-Genomics/checkpoints/hidden-state-genomics/ef16/sae/layer_23.pt")
 
     # load data
+    data = read_bed_file(data_path)
+    data = data.groupby("name")
+
+    # calculate correlations for each annotation
+
+    stats = {} # annotation: [pearson R for each feature]
+    
+    for group, df in tqdm(data):
+        seq_list = get_sequences_from_dataframe(df, seqrepo)
+
+    return None
 
 
-
+###############################################################################
 # run module
+###############################################################################
 if __name__ == "__main__":
     load_dotenv()
     tapify(main)
