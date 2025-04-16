@@ -10,7 +10,8 @@ import numpy as np
 from biocommons.seqrepo import SeqRepo
 
 from hsg.stattools.features import get_latent_model
-from hsg.stattools.crosscorr import binarize_features, cross_correlation, xcorr_pearson
+from hsg.stattools.crosscorr import xcorr_pearson
+from scipy.signal import correlate
 
 import os, difflib, warnings
 warnings.filterwarnings("ignore")
@@ -221,16 +222,52 @@ def generate_feature_vectors(seq_list: list[str], max_context: int, model) -> li
 
     return feature_vectors
 
+def binarize_features(feat_array: np.array, threshold: float = 1.0) -> np.array:
+    """
+    Binarize the feature array based on a threshold (numpy).
+    
+    Args:
+        feat_array (np.array): Feature array.
+        threshold (float): Threshold for binarization.
+        
+    Returns:
+        np.array: Binarized feature array.
+    """
+    # binarize the features
+    feat_array = np.where(feat_array > threshold, 1, 0)
+    return feat_array
+
 #################################################################################################################################
 # main
 #################################################################################################################################
-def main(data_path: str,):
+def main(
+        layer_idx: int = 23, 
+        exp_factor: int = 8,
+        sae_dir: str = None, 
+        data_path: str = "./data/Annotation Data/RefSeqFuncElemsGRCh38.bed", 
+        output_dir: str = None
+        ) -> None:
+
+    if sae_dir is None:
+        sae_path = f"/home/ek224/Hidden-State-Genomics/checkpoints/hidden-state-genomics/ef{exp_factor}/sae/layer_{layer_idx}.pt"
+    else:
+        sae_path = f"{sae_dir}/layer_{layer_idx}.pt"
+
+    if output_dir is None:
+        output_dir = f"./data/feature_annotation/ef{exp_factor}/layer_{layer_idx}"
+
+    # check pathing
+    if not os.path.isfile(sae_path):
+        raise FileNotFoundError(f"SAE file not found: {sae_path}")
+    if not os.path.isfile(data_path):
+        raise FileNotFoundError(f"Data file not found: {data_path}")
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
 
     print("Loading Utilities...")
 
     seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
-    model = get_latent_model(os.environ["NT_MODEL"], layer_idx=23, 
-                             sae_path="/home/ek224/Hidden-State-Genomics/checkpoints/hidden-state-genomics/ef16/sae/layer_23.pt")
+    model = get_latent_model(os.environ["NT_MODEL"], layer_idx=layer_idx, sae_path=sae_path)
 
     # load data
     print("Reading Data from BED file...")
@@ -239,20 +276,30 @@ def main(data_path: str,):
 
     # calculate correlations for each annotation
     print("Calculating correlations...")
-    stats = {} # annotation: [pearson R for each feature]
-    
+
     for group, df in tqdm(data):
         
+        # get sequences described in bed data, pad some so vector not just 1s
         seq_list = get_sequences_from_dataframe(df, seqrepo, pad_size=100)
+        # get the annotation vectors
         annotations = generate_annotation_vectors(seq_list, pad_size=100)
+        annotations = np.concatenate(annotations, axis=0)
+        # get the feature vectors from NTv2
         feature_arrays = generate_feature_vectors(seq_list, max_context=6000, model=model)
+        feature_arrays = np.concatenate(feature_arrays, axis=0)
+        # iterate through transpose to get features as x, sequence idx as y
+        for feat in feature_arrays.T:
+            # binarize the features
+            feat = binarize_features(feat)
+            # calculate the cross correlation
+            xcorr = correlate(annotations, feat)
+            # get the pearson correlation
+            pearson = xcorr_pearson(annotations, feat)
+            # save the results
+            np.savez(f"{output_dir}/{group}.npz", xcorr=xcorr, pearson=pearson)
 
-        for i, annot in enumerate(annotations):
-            assert len(annot) == len(feature_arrays[i]), f"Annotation length {len(annot)} does not match feature array length {len(feature_arrays[i])}"
-
-        stats[group] = None
-
-    return stats
+    print("Done!")
+    print(f"Results saved to {output_dir}")
 
 
 ###############################################################################
