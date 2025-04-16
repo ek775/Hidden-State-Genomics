@@ -78,6 +78,9 @@ class LatentModel(torch.nn.Module):
         if return_logits:
             results.append(logits)
 
+        if self.device != "cpu":
+            torch.cuda.empty_cache()
+
         # unpack results or return latents only
         if len(results) > 1:
             return tuple(results)
@@ -133,7 +136,7 @@ class FullLatentModel(torch.nn.Module):
             Form of the dictionary:
             {
                 "logits": torch.Tensor,
-                "hidden_states": tuple[torch.Tensor],
+                "hidden_states": list[torch.Tensor],
                 "tokens": list[str],
                 "latents": {
                     "layer": torch.Tensor
@@ -167,8 +170,16 @@ class FullLatentModel(torch.nn.Module):
             encoder_attention_mask=mask,
             output_hidden_states=True
         )
+        # remove batch dimension
+        base_prediction.hidden_states = [x.squeeze() for x in base_prediction.hidden_states]
+        base_prediction.hidden_states = [x[mask.squeeze()] for x in base_prediction.hidden_states]
+        base_prediction.hidden_states = [x.cpu() for x in base_prediction.hidden_states]
+        base_prediction.logits = base_prediction.logits.squeeze()
+        base_prediction.logits = base_prediction.logits[mask.squeeze()]
+        base_prediction.logits = base_prediction.logits.cpu()
 
-        results["logits"] = base_prediction.logits.cpu()
+        # configure results to return
+        results["logits"] = base_prediction.logits
         results["hidden_states"] = base_prediction.hidden_states
         results["tokens"] = tokens
         results["latents"] = {}
@@ -180,6 +191,8 @@ class FullLatentModel(torch.nn.Module):
             reconstructions, features = self.saes[sae](hidden_states, output_features=True)
             results["latents"][sae] = features.cpu()
             results["reconstructions"][sae] = reconstructions.cpu()
+
+        torch.cuda.empty_cache()
 
         # All Done!
         return results
