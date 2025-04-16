@@ -1,17 +1,14 @@
 import torch
-from transformers.models.esm.modeling_esm import EsmForMaskedLM
-from transformers.models.esm.tokenization_esm import EsmTokenizer
 from hsg.pipelines.hidden_state import load_model
 from hsg.sae.protocol.etl import extract_hidden_states
 from hsg.sae.dictionary import AutoEncoder
-from tqdm import tqdm
 from umap import UMAP
 import umap.plot as uplot
 import plotly.express as px
 import numpy as np
 
 # built ins
-import os, logging, sys
+import os
 from pathlib import Path
 
 # Objects
@@ -81,6 +78,9 @@ class LatentModel(torch.nn.Module):
         if return_logits:
             results.append(logits)
 
+        if self.device != "cpu":
+            torch.cuda.empty_cache()
+
         # unpack results or return latents only
         if len(results) > 1:
             return tuple(results)
@@ -136,7 +136,7 @@ class FullLatentModel(torch.nn.Module):
             Form of the dictionary:
             {
                 "logits": torch.Tensor,
-                "hidden_states": tuple[torch.Tensor],
+                "hidden_states": list[torch.Tensor],
                 "tokens": list[str],
                 "latents": {
                     "layer": torch.Tensor
@@ -170,8 +170,16 @@ class FullLatentModel(torch.nn.Module):
             encoder_attention_mask=mask,
             output_hidden_states=True
         )
+        # remove batch dimension
+        base_prediction.hidden_states = [x.squeeze() for x in base_prediction.hidden_states]
+        base_prediction.hidden_states = [x[mask.squeeze()] for x in base_prediction.hidden_states]
+        base_prediction.hidden_states = [x.cpu() for x in base_prediction.hidden_states]
+        base_prediction.logits = base_prediction.logits.squeeze()
+        base_prediction.logits = base_prediction.logits[mask.squeeze()]
+        base_prediction.logits = base_prediction.logits.cpu()
 
-        results["logits"] = base_prediction.logits.cpu()
+        # configure results to return
+        results["logits"] = base_prediction.logits
         results["hidden_states"] = base_prediction.hidden_states
         results["tokens"] = tokens
         results["latents"] = {}
@@ -184,6 +192,8 @@ class FullLatentModel(torch.nn.Module):
             results["latents"][sae] = features.cpu()
             results["reconstructions"][sae] = reconstructions.cpu()
 
+        torch.cuda.empty_cache()
+
         # All Done!
         return results
 
@@ -192,7 +202,14 @@ class FullLatentModel(torch.nn.Module):
 # Functions
 def get_latent_model(parent_model_path, layer_idx, sae_path) -> LatentModel:
     """
-    Abstraction for easy loading of latent models
+    Abstraction for easy loading of latent models.
+
+    Args:
+        parent_model_path (str): Path to the parent model.
+        layer_idx (int): Layer index for the parent model.
+        sae_path (str): Path to the SAE model.
+    Returns:
+        LatentModel: A LatentModel object.
     """
 
     parent_model, tokenizer, device = load_model(parent_model_path)
