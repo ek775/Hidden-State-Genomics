@@ -197,7 +197,7 @@ def xcorr_pearson(features: np.array, annotation_array: np.array) -> np.float64:
     """
     Computes the Pearson correlation coefficient between two binary 1D arrays of equal length.
     """
-    assert len(features) == len(annotation_array), "Features and annotation array must be of the same length."
+    assert len(features) == len(annotation_array), f"Length of features ({len(features)}) and annotation array ({len(annotation_array)}) do not match."
     assert features.ndim == 1, "Features must be a 1D array."
     assert annotation_array.ndim == 1, "Annotation array must be a 1D array."
 

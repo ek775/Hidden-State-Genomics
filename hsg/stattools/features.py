@@ -220,25 +220,25 @@ def get_latent_model(parent_model_path, layer_idx, sae_path) -> LatentModel:
 
     return latent_model
 
-def generate_umap(embeddings: torch.Tensor, color: np.array, n_components:int = 2, **kwargs):
-    """
-    Generate a UMAP plot from a tensor of embeddings
-    """
-    umap = UMAP(n_components=n_components, **kwargs)
-    umap_embeddings = umap.fit(embeddings)
-    uplot.points(umap_embeddings, labels=color)
+#def generate_umap(embeddings: torch.Tensor, color: np.array, n_components:int = 2, **kwargs):
+#    """
+#    Generate a UMAP plot from a tensor of embeddings
+#    """
+#    umap = UMAP(n_components=n_components, **kwargs)
+#    umap_embeddings = umap.fit(embeddings)
+#    uplot.points(umap_embeddings, labels=color)
 
-def interactive_umap(embeddings: torch.Tensor, color: np.array, n_components:int = 2, **kwargs):
-    """
-    Generate an interactive UMAP plot from a tensor of embeddings
-    """
-    umap = UMAP(n_components=n_components, **kwargs)
-    umap_embeddings = umap.fit_transform(embeddings)
-    fig = px.scatter(umap_embeddings, x=0, y=1, color=color, title=f"UMAP {kwargs}")
-    fig.show()
+#def interactive_umap(embeddings: torch.Tensor, color: np.array, n_components:int = 2, **kwargs):
+#    """
+#    Generate an interactive UMAP plot from a tensor of embeddings
+#    """
+#    umap = UMAP(n_components=n_components, **kwargs)
+#    umap_embeddings = umap.fit_transform(embeddings)
+#    fig = px.scatter(umap_embeddings, x=0, y=1, color=color, title=f"UMAP {kwargs}")
+#    fig.show()
 
-def normalize(features: torch.Tensor) -> torch.Tensor:
-    """
-    Normalize a set of features based on the maximum value so that all activations fall between zero and one.
-    """
-    pass
+#def normalize(features: torch.Tensor) -> torch.Tensor:
+#    """
+#    Normalize a set of features based on the maximum value so that all activations fall between zero and one.
+#    """
+#    pass
