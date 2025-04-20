@@ -12,8 +12,10 @@ from biocommons.seqrepo import SeqRepo
 from hsg.stattools.features import get_latent_model
 from hsg.stattools.crosscorr import xcorr_pearson
 from scipy.signal import correlate
+from google.cloud import storage
 
 import os, difflib, warnings
+from tempfile import TemporaryFile
 warnings.filterwarnings("ignore")
 
 ##################################################################################################################################
@@ -155,72 +157,6 @@ def find_chunky_index(idx: int, chunky: list[str]) -> int:
     # if we get here, the index is out of bounds
     return -1
 
-def generate_feature_vectors(seq_list: list[str], max_context: int, model) -> list[np.array]:
-    """
-    Ingest a list of sequences and return a list of feature matrices for each sequence. Resulting matrices
-    are of shape (sequence_length, hidden_size) where hidden_size is the size of the latent representation
-    of the model.
-    """
-
-    feature_vectors = []
-
-    for seq in seq_list:
-        # split the sequence into chunks no more than max_context
-        chunks = [seq[i:i+max_context] for i in range(0, len(seq), max_context)]
-
-        # get the latent representation for each chunk
-        ls_of_feat_arrays: list[torch.Tensor] = []
-        ls_of_tokens: list[str] = []
-        
-        for c in chunks:
-
-            # run model forward pass on data
-            with torch.no_grad():
-                features, tokens = model(c, return_tokens=True)
-
-            # remove special tokens
-            tokens = [t for t in tokens if t not in ["<cls>", "<pad>"]]
-
-            ls_of_feat_arrays.append(features[1:]) # remove the first token which is the <cls> token
-            ls_of_tokens.extend(tokens)
-
-        # concatenate the results
-        feat_array = torch.cat(ls_of_feat_arrays, dim=0)
-        reassembled_chunks = "".join(ls_of_tokens)
-        
-        # if the reassembled sequence does not match the original, it is likely due to unknown tokens
-        # being marked as padding tokens and getting filtered out in our results. To align the feature matrices
-        # with the annotations, we use difflib to fill "Z" bases and insert zero vectors for that position
-        if reassembled_chunks != seq:
-            comparison = difflib.SequenceMatcher(None, reassembled_chunks, seq)
-            for tag, i1, i2, j1, j2 in comparison.get_opcodes():
-                if tag == 'replace':
-                    gap = j2-i2
-                    feat_array = torch.cat(
-                        (feat_array[:i1], torch.zeros((1, feat_array.size()[1]), device=model.device), feat_array[j1:]), 
-                        dim=0
-                    )
-                    
-                    gap_token = "Z" * gap
-                    gap_index = find_chunky_index(i1, ls_of_tokens)
-                    ls_of_tokens.insert(gap_index, gap_token)
-        
-        # extend the token level feature activations to provide feature values for each base and 
-        # align with the annotation vectors
-        exp_features = []
-        for i, j in enumerate(feat_array):
-            exp_features.extend([j for _ in range(len(ls_of_tokens[i]))])
-        feat_array = torch.stack(exp_features)
-
-        # convert to numpy array
-        feat_array = feat_array.cpu().numpy()
-        feature_vectors.append(feat_array)
-
-        # clear cuda cache
-        if model.device != "cpu":
-            torch.cuda.empty_cache()
-
-    return feature_vectors
 
 def binarize_features(feat_array: np.array, threshold: float = 1.0) -> np.array:
     """
@@ -236,6 +172,29 @@ def binarize_features(feat_array: np.array, threshold: float = 1.0) -> np.array:
     # binarize the features
     feat_array = np.where(feat_array > threshold, 1, 0)
     return feat_array
+
+
+def gcloud_upload(data: object, bucket_name: str, destination_blob_name: str) -> None:
+    """
+    Upload a file to Google Cloud Storage.
+    
+    Args:
+        file_path (str): Path to the file to upload.
+        bucket_name (str): Name of the GCS bucket.
+        destination_blob_name (str): Destination blob name in GCS.
+    """
+    # Initialize a GCS client
+    storage_client = storage.Client()
+
+    # Get the bucket
+    bucket = storage_client.bucket(bucket_name)
+
+    # Create a blob object from the file path
+    blob = bucket.blob(destination_blob_name)
+
+    # Upload the file
+    blob.upload_from_file(data)
+
 
 #################################################################################################################################
 # main
@@ -254,7 +213,7 @@ def main(
         sae_path = f"{sae_dir}/layer_{layer_idx}.pt"
 
     if output_dir is None:
-        output_dir = f"./data/feature_annotation/ef{exp_factor}/layer_{layer_idx}"
+        output_dir = f"gs://hsg-annotation-data/ef{exp_factor}/layer_{layer_idx}"
 
     # check pathing
     if not os.path.isfile(sae_path):
@@ -300,7 +259,7 @@ def main(
             chunks = [seq[i:i+6000] for i in range(0, len(seq), 6000)]
             group_chunks.extend(chunks)
         del seq_list
-        
+
         # get the latent representation for each chunk, calculate correlations
         print("Calculating track v feature correlations...")
         num = 0
@@ -377,14 +336,22 @@ def main(
             # convert to numpy arrays
             xcorr_arrays = np.array(xcorr_arrays)
             pearson_scores = np.array(pearson_scores)
-            # flush to disk
-            if not os.path.exists(f"{output_dir}/{group}"):
-                os.makedirs(f"{output_dir}/{group}", exist_ok=True)
-            np.savez(f"{output_dir}/{group}/{num}.npz", pearson=pearson_scores, xcorr=xcorr_arrays)
 
-        # end of per chunk loop
-    # end of per group loop
+            # flush to disk OR write to gcloud bucket
+            if output_dir.startswith("gs://"):
+                # write to gcloud bucket
+                with TemporaryFile() as temp_file:
+                    np.savez(temp_file, pearson_scores=pearson_scores, xcorr_arrays=xcorr_arrays)
+                    temp_file.seek(0)
+                    gcloud_upload(temp_file, output_dir.split("/")[2], f"{'/'.join(output_dir.split("/")[-2:])}/{group}/{num}.npz")
+            else:
+                # write to local disk
+                np.savez(f"{output_dir}/{group}/{num}.npz", pearson_scores=pearson_scores, xcorr_arrays=xcorr_arrays)
 
+        # end of chunk loop
+
+    # end of group loop
+            
     print("=== Done ===")
     print(f"Results saved to {output_dir}")
 
