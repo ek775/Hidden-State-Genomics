@@ -3,27 +3,42 @@
 # import libraries
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 import plotly.express as px
 
 from google.cloud import storage
 
 ### OBJECTS ###
 class CloudDataHandler:
-    def __init__(self, bucket_name):
+    def __init__(self, bucket_name: str = "hsg-annotation-data"):
         self.bucket_name = bucket_name
         self.client = storage.Client()
         self.bucket = self.client.get_bucket(bucket_name)
+        self.navigator = Navigator()
 
-    def download_blob(self, source_blob_name, destination_file_name):
-        """Downloads a blob from the bucket."""
-        blob = self.bucket.blob(source_blob_name)
-        blob.download_to_filename(destination_file_name)
+    def retrieve_array(self, expansion: int, layer: int, track: str, fragment: int):
+        expansion = f"ef{expansion}"
+        layer = f"layer_{layer}"
+        fragment = f"{fragment}.npz"
+        # check that fragment is in the bucket
+        if not self.bucket.blob(f"{expansion}/{layer}/{track}/{fragment}").exists():
+            raise ValueError(f"Fragment {fragment} not found in bucket {self.bucket_name}.")
+        # read the file into memory from the bucket
+        blob = self.bucket.blob(f"{expansion}/{layer}/{track}/{fragment}")
+        with blob.open("rb") as f:
+            pearson_scores, xcorr_arrays = np.load(f, allow_pickle=True)
 
-    def upload_blob(self, source_file_name, destination_blob_name):
-        """Uploads a file to the bucket."""
-        blob = self.bucket.blob(destination_blob_name)
-        blob.upload_from_filename(source_file_name)
+        return pearson_scores, xcorr_arrays
+    
+    def list_fragments(self, expansion: int, layer: int, track: str):
+        blobs = self.bucket.list_blobs(prefix=f"ef{expansion}/layer_{layer}/{track}/")
+        return [blob.name.split("/")[-1][:-4] for blob in blobs if blob.name.endswith(".npz")]
+    
+class Navigator:
+    def __init__(self):
+        self.expansions = ["ef8"]
+        self.layers = [f"layer_{i}" for i in range(24)]
+        with open("data/Annotation\ Data/tracks.txt", "r") as f:
+            self.tracks = [line.strip() for line in f.readlines()]
 
 ### FUNCTIONS ###
 def plot_embeddings(embeddings, labels, title="HSG Embeddings"):
