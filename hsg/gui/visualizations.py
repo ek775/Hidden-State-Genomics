@@ -41,7 +41,7 @@ class Navigator:
             self.tracks = [line.strip() for line in f.readlines()]
 
 ### FUNCTIONS ###
-def plot_embeddings(embeddings, labels, title="HSG Embeddings"):
+def plot_embeddings(embeddings, labels, title="HSG Embeddings") -> px.scatter:
     """
     Plot the HSG embeddings using PCA and t-SNE.
 
@@ -62,9 +62,9 @@ def plot_embeddings(embeddings, labels, title="HSG Embeddings"):
 
     # Create a scatter plot using Plotly
     fig = px.scatter(x=pca_result[:, 0], y=pca_result[:, 1], color=labels, title=f"{title} - PCA")
-    fig.show()
+    return fig
 
-def plot_cross_correlation_lags(corr, lags, title="Cross-Correlation Lags"):
+def plot_cross_correlation_lags(corr, lags, title="Cross-Correlation Lags") -> plt.figure:
     """
     Plot the cross-correlation lags.
 

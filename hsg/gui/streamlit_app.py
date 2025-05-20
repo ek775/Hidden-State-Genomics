@@ -19,17 +19,19 @@ def main():
     # Load environment variables from .env file
     load_dotenv()
 
-    # Set the page title and layout
-    st.set_page_config(page_title="HSG Embeddings Dashboard", layout="wide")
+    # load pages
+    page_list = []
+    pwd = os.path.dirname(os.path.abspath(__file__))
 
-    # Set the title of the app
-    st.title("HSG Embeddings Dashboard")
+    for filename in os.listdir("hsg/gui/pages"):
+        if filename.endswith(".py") and filename != "__init__.py":
+            page_path = pwd + "/pages/" + filename
+            page = st.Page(page=page_path, title=filename[:-3])
+            page_list.append(page)
 
-    # Add a description or instructions for the app
-    st.write("This is a dashboard for visualizing HSG embeddings from NCBI regulatory element tracks.")
-
-    # Add your app logic here
-    st.write("Hello, world!")
+    current_page = st.navigation(pages=page_list)
+    current_page.run()
 
 if __name__ == "__main__":
+    st.set_page_config(page_title="HSG Embeddings Dashboard", layout="wide")
     main()
