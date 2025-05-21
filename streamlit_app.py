@@ -25,7 +25,7 @@ def main():
 
     for filename in os.listdir("hsg/gui/pages"):
         if filename.endswith(".py") and filename != "__init__.py":
-            page_path = pwd + "/pages/" + filename
+            page_path = "hsg/gui/pages/" + filename
             page = st.Page(page=page_path, title=filename[:-3])
             page_list.append(page)
 

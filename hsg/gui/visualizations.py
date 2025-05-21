@@ -2,10 +2,13 @@
 
 # import libraries
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.express as px
 
 from google.cloud import storage
+
+from io import BytesIO
 
 ### OBJECTS ###
 class CloudDataHandler:
@@ -20,12 +23,17 @@ class CloudDataHandler:
         layer = f"layer_{layer}"
         fragment = f"{fragment}.npz"
         # check that fragment is in the bucket
-        if not self.bucket.blob(f"{expansion}/{layer}/{track}/{fragment}").exists():
-            raise ValueError(f"Fragment {fragment} not found in bucket {self.bucket_name}.")
+        path = f"{expansion}/{layer}/{track}/{fragment}"
+        if not self.bucket.blob(path).exists():
+            raise ValueError(f"Fragment {path} not found in bucket {self.bucket_name}.")
         # read the file into memory from the bucket
-        blob = self.bucket.blob(f"{expansion}/{layer}/{track}/{fragment}")
+        blob = self.bucket.get_blob(f"{expansion}/{layer}/{track}/{fragment}")
         with blob.open("rb") as f:
-            pearson_scores, xcorr_arrays = np.load(f, allow_pickle=True)
+            data = np.load(f)
+            pearson_scores = data["pearson_scores"]
+            xcorr_arrays = data["xcorr_arrays"]
+            print(f"Pearson Data: {type(pearson_scores)} with shape: {pearson_scores.shape}")
+            print(f"XCorr Data: {type(xcorr_arrays)} with shape: {xcorr_arrays.shape}")
 
         return pearson_scores, xcorr_arrays
     
@@ -37,17 +45,16 @@ class Navigator:
     def __init__(self):
         self.expansions = ["ef8"]
         self.layers = [f"layer_{i}" for i in range(24)]
-        with open("data/Annotation\ Data/tracks.txt", "r") as f:
+        with open("data/Annotation Data/tracks.txt", "r") as f:
             self.tracks = [line.strip() for line in f.readlines()]
 
 ### FUNCTIONS ###
-def plot_embeddings(embeddings, labels, title="HSG Embeddings") -> px.scatter:
+def plot_embeddings(embeddings, title="HSG Embeddings") -> px.scatter:
     """
     Plot the HSG embeddings using PCA and t-SNE.
 
     Parameters:
     - embeddings: numpy array of shape (n_samples, n_features)
-    - labels: list of labels for each sample
     - title: title of the plot
     """
     # Perform PCA
@@ -61,7 +68,7 @@ def plot_embeddings(embeddings, labels, title="HSG Embeddings") -> px.scatter:
     tsne_result = tsne.fit_transform(embeddings)
 
     # Create a scatter plot using Plotly
-    fig = px.scatter(x=pca_result[:, 0], y=pca_result[:, 1], color=labels, title=f"{title} - PCA")
+    fig = px.scatter(x=pca_result[:, 0], y=pca_result[:, 1], title=f"{title} - PCA")
     return fig
 
 def plot_cross_correlation_lags(corr, lags, title="Cross-Correlation Lags") -> plt.figure:
@@ -79,6 +86,38 @@ def plot_cross_correlation_lags(corr, lags, title="Cross-Correlation Lags") -> p
     plt.xlabel("Lags")
     plt.ylabel("Cross-Correlation")
     plt.grid()
+    return fig
+
+def plot_all_feature_correlations(pearson_scores, title="Fragment Feature Correlations") -> plt.figure:
+    """
+    Order the correlations from highest to lowest and plot a bar chart representing their values (0,1).
+    
+    Parameters:
+    - pearson_scores: 1-D numpy array of shape (n_features,)
+    - title: title of the plot
+    """
+    pearson_scores = np.sort(pearson_scores)
+    fig = plt.figure(figsize=(10, 4))
+    plt.bar(range(len(pearson_scores)), pearson_scores)
+    plt.title(title)
+    plt.xlabel("Features")
+    plt.ylabel("Pearson Correlation")
+    plt.grid()
+    return fig
+
+def plot_best_correlations(pearson_scores, title="Best Feature Correlations") -> plt.figure:
+    """
+    Plot the top 10 features by pearson correlation.
+    """
+    fig = plt.figure(figsize=(10, 4))
+    ps = pd.DataFrame(pearson_scores)
+    sorted_indices = ps[0].nlargest(10).index
+    sorted_scores = ps[0].nlargest(10).values
+    sorted_indices = [f"f/{idx}" for idx in sorted_indices]
+    plt.barh(y=sorted_indices, width=sorted_scores)
+    plt.title(title)
+    plt.xlabel("Pearson Correlation")
+    plt.ylabel("Features")
     return fig
 
 # prevents script output when importing functions
