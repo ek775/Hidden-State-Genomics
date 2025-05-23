@@ -5,14 +5,20 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.express as px
+import streamlit as st
 
 from google.cloud import storage
 
 from io import BytesIO
 
 ### OBJECTS ###
+@st.cache_resource
 class CloudDataHandler:
+    """
+    Class to handle data retrieval from Google Cloud Storage.
+    """
     def __init__(self, bucket_name: str = "hsg-annotation-data"):
+        print("Initializing CloudDataHandler...")
         self.bucket_name = bucket_name
         self.client = storage.Client()
         self.bucket = self.client.get_bucket(bucket_name)

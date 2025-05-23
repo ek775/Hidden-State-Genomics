@@ -15,24 +15,31 @@ st.sidebar.write("Use the dropdown menus below to explore NTv2 feature associati
 
 
 # initialize objects
-data_handle = CloudDataHandler()
+data_handle = CloudDataHandler() # should be cached by streamlit
 
-# dropdown menu
+# load available tracks
 with open("data/Annotation Data/tracks.txt", "r") as f:
     tracks = [line.strip() for line in f.readlines()]
 
-
 # fetch data and render plots
-if track := st.sidebar.selectbox("Select a feature", tracks, index=None):
+with st.sidebar:
+    # Choose expansion factor
+    # TODO: generate data for all expansion factors
+    expansion = st.selectbox("Expansion Size", [8])
+    # Choose layer
+    layer = st.selectbox("layer", [i for i in range(24)])
+    # Choose track
+    track = st.selectbox("NCBI Regulatory Element Track", tracks)
+    # Choose fragment
+    # TODO: show available fragments for the selected track
+    fragment = st.selectbox("Fragment", [i for i in range(1, 2)])
 
+
+if st.sidebar.button("GO!", type="primary"):
     # get selected track data
-    st.write(f"Selected track: {track}")
-    st.write(f"Expansion: 8")
-    st.write(f"Layer: 23")
-    st.write(f"Fragment: 1")
     with st.spinner("Loading data..."):
         # retrieve the data
-        pearson_scores, xcorr_array = data_handle.retrieve_array(expansion=8, layer=23, track=track, fragment=1)
+        pearson_scores, xcorr_array = data_handle.retrieve_array(expansion=expansion, layer=layer, track=track, fragment=fragment)
 
     # Display the data
     with st.spinner("Generating plots..."):
