@@ -4,6 +4,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import plotly.express as px
 import streamlit as st
 
@@ -54,29 +55,9 @@ class Navigator:
         with open("data/Annotation Data/tracks.txt", "r") as f:
             self.tracks = [line.strip() for line in f.readlines()]
 
+
 ### FUNCTIONS ###
-def plot_embeddings(embeddings, title="HSG Embeddings") -> px.scatter:
-    """
-    Plot the HSG embeddings using PCA and t-SNE.
-
-    Parameters:
-    - embeddings: numpy array of shape (n_samples, n_features)
-    - title: title of the plot
-    """
-    # Perform PCA
-    from sklearn.decomposition import PCA
-    pca = PCA(n_components=2)
-    pca_result = pca.fit_transform(embeddings)
-
-    # Perform t-SNE
-    from sklearn.manifold import TSNE
-    tsne = TSNE(n_components=2, perplexity=30, n_iter=300)
-    tsne_result = tsne.fit_transform(embeddings)
-
-    # Create a scatter plot using Plotly
-    fig = px.scatter(x=pca_result[:, 0], y=pca_result[:, 1], title=f"{title} - PCA")
-    return fig
-
+@st.cache_data
 def plot_cross_correlation_lags(corr, lags, title="Cross-Correlation Lags") -> plt.figure:
     """
     Plot the cross-correlation lags.
@@ -86,7 +67,7 @@ def plot_cross_correlation_lags(corr, lags, title="Cross-Correlation Lags") -> p
     - lags: numpy array of lag values
     - title: title of the plot
     """
-    fig = plt.figure(figsize=(10, 6))
+    fig = plt.figure()
     plt.plot(lags, corr)
     plt.title(title)
     plt.xlabel("Lags")
@@ -94,6 +75,8 @@ def plot_cross_correlation_lags(corr, lags, title="Cross-Correlation Lags") -> p
     plt.grid()
     return fig
 
+
+@st.cache_data
 def plot_all_feature_correlations(pearson_scores, title="Fragment Feature Correlations") -> plt.figure:
     """
     Order the correlations from highest to lowest and plot a bar chart representing their values (0,1).
@@ -103,19 +86,22 @@ def plot_all_feature_correlations(pearson_scores, title="Fragment Feature Correl
     - title: title of the plot
     """
     pearson_scores = np.sort(pearson_scores)
-    fig = plt.figure(figsize=(10, 4))
+    fig, ax = plt.subplots()
     plt.bar(range(len(pearson_scores)), pearson_scores)
     plt.title(title)
     plt.xlabel("Features")
     plt.ylabel("Pearson Correlation")
+    plt.ylim(-1,1)
     plt.grid()
-    return fig
+    return fig, ax
 
+
+@st.cache_data
 def plot_best_correlations(pearson_scores, title="Best Feature Correlations") -> plt.figure:
     """
     Plot the top 10 features by pearson correlation.
     """
-    fig = plt.figure(figsize=(10, 4))
+    fig, ax = plt.subplots()
     ps = pd.DataFrame(pearson_scores)
     sorted_indices = ps[0].nlargest(10).index
     sorted_scores = ps[0].nlargest(10).values
@@ -123,8 +109,70 @@ def plot_best_correlations(pearson_scores, title="Best Feature Correlations") ->
     plt.barh(y=sorted_indices, width=sorted_scores)
     plt.title(title)
     plt.xlabel("Pearson Correlation")
+    plt.xlim(0, 1)
     plt.ylabel("Features")
-    return fig
+    return fig, ax
+
+
+def feature_views(suptitle: str, pearson_scores: np.ndarray, xcorr: np.ndarray) -> plt.figure:
+    """
+    Configure the feature views for the GUI.
+    """
+    # data
+    sorted_pearson_scores = np.sort(pearson_scores)
+    ps = pd.DataFrame(sorted_pearson_scores)
+    sorted_indices = ps[0].nlargest(5).index
+    sorted_scores = ps[0].nlargest(5).values
+    sorted_indices = [f"f/{idx}" for idx in sorted_indices]
+
+    # create a grid layout for the plots
+    main_fig = plt.figure(figsize=(10, 8))
+    gs = gridspec.GridSpec(nrows=3, ncols=3, wspace=1.5, hspace=1.5)
+    main_fig.suptitle(suptitle, fontsize=16)
+
+    # best feature correlations
+    ax2 = main_fig.add_subplot(gs[:, -1])
+    ax2.barh(y=sorted_indices, width=sorted_scores, color="purple")
+    ax2.set_title("Top 5 Features by Pearson Correlation")
+    ax2.set_xlabel("Pearson Correlation")
+    ax2.set_xlim(0, 1)
+    ax2.set_ylabel("Features")
+    ax2.grid()
+
+    # all feature correlations
+    ax1 = main_fig.add_subplot(gs[0,:-1])
+    ax1.bar(range(len(pearson_scores)), pearson_scores)
+    ax1.set_title("Fragment Feature Correlations")
+    ax1.set_xlabel("Features")
+    ax1.set_ylabel("Pearson Correlation")
+    ax1.set_ylim(-1, 1)
+    ax1.grid()
+
+    # active feature correlations
+    ax3 = main_fig.add_subplot(gs[1, :-1])
+    ax3.bar(range(len(sorted_pearson_scores)), sorted_pearson_scores, color="orange")
+    ax3.set_title("Active Feature Correlations")
+    ax3.set_xlabel("Features")
+    ax3.set_ylabel("Pearson Correlation")
+    ax3.set_ylim(-1, 1)
+    ax3.grid()
+
+    # cross-correlation lags
+    ax4 = main_fig.add_subplot(gs[2, :-1])
+    sigs = {}
+    for xc in sorted_indices:
+        idx = int(xc.split("/")[1])
+        sigs[xc] = xcorr[idx]
+    for s in sigs:
+        ax4.plot(sigs[s], label=s)
+    ax4.set_title("Best Feature Cross-Correlation Lags")
+    ax4.set_xlabel("Lags")
+    ax4.set_ylabel("Cross-Correlation")
+    ax4.legend()
+    ax4.grid()
+
+    return main_fig
+
 
 # prevents script output when importing functions
 if __name__ == "__main__":
