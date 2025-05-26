@@ -44,7 +44,7 @@ class CloudDataHandler:
 
         return pearson_scores, xcorr_arrays
     
-    def list_fragments(self, expansion: int, layer: int, track: str):
+    def list_fragments(self, expansion: int, layer: int, track: str) -> list[str]:
         blobs = self.bucket.list_blobs(prefix=f"ef{expansion}/layer_{layer}/{track}/")
         return [blob.name.split("/")[-1][:-4] for blob in blobs if blob.name.endswith(".npz")]
     
@@ -57,63 +57,6 @@ class Navigator:
 
 
 ### FUNCTIONS ###
-@st.cache_data
-def plot_cross_correlation_lags(corr, lags, title="Cross-Correlation Lags") -> plt.figure:
-    """
-    Plot the cross-correlation lags.
-
-    Parameters:
-    - corr: numpy array of cross-correlation values
-    - lags: numpy array of lag values
-    - title: title of the plot
-    """
-    fig = plt.figure()
-    plt.plot(lags, corr)
-    plt.title(title)
-    plt.xlabel("Lags")
-    plt.ylabel("Cross-Correlation")
-    plt.grid()
-    return fig
-
-
-@st.cache_data
-def plot_all_feature_correlations(pearson_scores, title="Fragment Feature Correlations") -> plt.figure:
-    """
-    Order the correlations from highest to lowest and plot a bar chart representing their values (0,1).
-    
-    Parameters:
-    - pearson_scores: 1-D numpy array of shape (n_features,)
-    - title: title of the plot
-    """
-    pearson_scores = np.sort(pearson_scores)
-    fig, ax = plt.subplots()
-    plt.bar(range(len(pearson_scores)), pearson_scores)
-    plt.title(title)
-    plt.xlabel("Features")
-    plt.ylabel("Pearson Correlation")
-    plt.ylim(-1,1)
-    plt.grid()
-    return fig, ax
-
-
-@st.cache_data
-def plot_best_correlations(pearson_scores, title="Best Feature Correlations") -> plt.figure:
-    """
-    Plot the top 10 features by pearson correlation.
-    """
-    fig, ax = plt.subplots()
-    ps = pd.DataFrame(pearson_scores)
-    sorted_indices = ps[0].nlargest(10).index
-    sorted_scores = ps[0].nlargest(10).values
-    sorted_indices = [f"f/{idx}" for idx in sorted_indices]
-    plt.barh(y=sorted_indices, width=sorted_scores)
-    plt.title(title)
-    plt.xlabel("Pearson Correlation")
-    plt.xlim(0, 1)
-    plt.ylabel("Features")
-    return fig, ax
-
-
 def feature_views(suptitle: str, pearson_scores: np.ndarray, xcorr: np.ndarray) -> plt.figure:
     """
     Configure the feature views for the GUI.
@@ -168,7 +111,7 @@ def feature_views(suptitle: str, pearson_scores: np.ndarray, xcorr: np.ndarray) 
     ax4.set_title("Best Feature Cross-Correlation Lags")
     ax4.set_xlabel("Lags")
     ax4.set_ylabel("Cross-Correlation")
-    ax4.legend()
+    ax4.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     ax4.grid()
 
     return main_fig

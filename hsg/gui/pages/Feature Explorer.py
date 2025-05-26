@@ -8,7 +8,7 @@ st.title("Regulatory Element Track-Feature Association Explorer")
 st.write("This tool allows you to explore the association between SAE-derived features from NTv2 and known regulatory elements. Due to the limited context window " \
 "each track is broken into 6kb fragments, with 50 bases included on the 5' and 3' ends of each contiguous track region.")
 st.write("Use the sidebar to select features and explore their associations with known regulatory elements.")
-
+st.divider()
 
 # Add a sidebar for feature selection
 st.sidebar.title("Feature Selection")
@@ -35,7 +35,14 @@ with st.sidebar:
     track = st.selectbox("NCBI Regulatory Element Track", st.session_state.tracks)
     # Choose fragment
     # TODO: show available fragments for the selected track
-    fragment = st.selectbox("Fragment", [i for i in range(1, 2)])
+    fragment = st.selectbox(
+        "Fragment", 
+        data_handle.list_fragments(
+            expansion=expansion, 
+            layer=layer, 
+            track=track
+        ),
+    )
 
 # Add a button to retrieve data
 if st.sidebar.button("GO!", type="primary"):
@@ -48,7 +55,14 @@ if st.sidebar.button("GO!", type="primary"):
         st.session_state.title = f"Feature Explorer: ef{expansion} - layer {layer} - {track} - window {fragment}"
         st.success("Data loaded successfully!")
 
-# Display the data
-if "pearson_scores" in st.session_state:
+    # Generate the feature views plot
     with st.spinner("Generating plots..."):
-        st.pyplot(feature_views(suptitle=st.session_state.title, pearson_scores=st.session_state.pearson_scores, xcorr=st.session_state.xcorr_array))
+        st.session_state.figureone = feature_views(
+            suptitle=st.session_state.title, 
+            pearson_scores=st.session_state.pearson_scores, 
+            xcorr=st.session_state.xcorr_array
+        )
+
+# Display main figure
+if "figureone" in st.session_state:
+    st.pyplot(st.session_state.figureone)
