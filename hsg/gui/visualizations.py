@@ -26,6 +26,7 @@ class CloudDataHandler:
         self.navigator = Navigator()
 
     def retrieve_array(self, expansion: int, layer: int, track: str, fragment: int):
+        print(f"Retrieving data for ef{expansion}, layer {layer}, track {track}, fragment {fragment}...")
         expansion = f"ef{expansion}"
         layer = f"layer_{layer}"
         fragment = f"{fragment}.npz"
@@ -39,8 +40,11 @@ class CloudDataHandler:
             data = np.load(f)
             pearson_scores = data["pearson_scores"]
             xcorr_arrays = data["xcorr_arrays"]
-            print(f"Pearson Data: {type(pearson_scores)} with shape: {pearson_scores.shape}")
-            print(f"XCorr Data: {type(xcorr_arrays)} with shape: {xcorr_arrays.shape}")
+        
+        # show data retrieved
+        print("Retrieved data successfully.")
+        print(f"Pearson Data: {type(pearson_scores)} with shape: {pearson_scores.shape}")
+        print(f"XCorr Data: {type(xcorr_arrays)} with shape: {xcorr_arrays.shape}")
 
         return pearson_scores, xcorr_arrays
     
@@ -48,6 +52,7 @@ class CloudDataHandler:
         blobs = self.bucket.list_blobs(prefix=f"ef{expansion}/layer_{layer}/{track}/")
         return [blob.name.split("/")[-1][:-4] for blob in blobs if blob.name.endswith(".npz")]
     
+
 class Navigator:
     def __init__(self):
         self.expansions = ["ef8"]
@@ -115,6 +120,56 @@ def feature_views(suptitle: str, pearson_scores: np.ndarray, xcorr: np.ndarray) 
     ax4.grid()
 
     return main_fig
+
+
+def full_track_feat_avg(
+        handler: CloudDataHandler,
+        expansion:int,
+        layer: int,
+        track: str,
+):
+    """
+    Generate a plot of the average feature correlations for a full track.
+    """
+    # retrieve all fragments for the track
+    fragments = handler.list_fragments(expansion=expansion, layer=layer, track=track)
+    
+    # initialize an array to hold the average correlations
+    corrs = []
+    
+    # iterate over each fragment and retrieve the data
+    # use a progress bar to show progress
+    progress_bar = st.progress(0)
+    total_fragments = len(fragments)
+
+    for i, frag in enumerate(fragments):
+        # update progress bar
+        progress_bar.progress(i/total_fragments, text=f"Retrieving data for fragment {frag} ({i+1}/{total_fragments})")
+        # retrieve the data for the fragment
+        pearson_scores, _ = handler.retrieve_array(
+            expansion=expansion, 
+            layer=layer, 
+            track=track, 
+            fragment=frag
+        )
+        corrs.append(pearson_scores)
+    
+    # sum each fragment's feature correlations
+    n_samples = len(corrs)
+    corrs = np.stack(corrs)
+    assert corrs.shape[0] == n_samples, "Number of samples does not match number of fragments."
+    corrs = np.sum(corrs, axis=0)
+    corrs /= n_samples  # average the correlations
+
+    # create a plot of the average correlations
+    fig = plt.figure(figsize=(10, 6))
+    plt.bar(range(len(corrs)), corrs, color="blue")
+    plt.title(f"Average Feature Correlations for {track} (ef{expansion}, layer {layer})")
+    plt.xlabel("Features")
+    plt.ylabel(f"Average Pearson Correlation (n={n_samples})")
+    plt.ylim(-1, 1)
+    plt.grid()
+    return fig
 
 
 # prevents script output when importing functions
