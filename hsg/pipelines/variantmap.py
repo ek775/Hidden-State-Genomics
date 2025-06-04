@@ -9,10 +9,6 @@ from hgvs.validator import Validator
 import re
 import os
 
-# load environment variables
-from dotenv import load_dotenv
-load_dotenv()
-
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
