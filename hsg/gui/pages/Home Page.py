@@ -1,6 +1,18 @@
 import streamlit as st
 
+# import environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
 # Set title and layout
 st.title("HSG Embeddings Dashboard")
-st.write("This is a dashboard for visualizing HSG embeddings from NCBI regulatory element tracks.")
-st.write("Use the sidebar to navigate through different pages.")
+
+# initialize sidebar
+with st.sidebar as bar:
+    expansion = st.selectbox("Expansion Size", options=[8, 16, 32])
+    layer = st.selectbox("Layer", options=[i for i in range(24)])
+
+# initialize objects
+
+if 'model' not in st.session_state:
+    pass # TODO
