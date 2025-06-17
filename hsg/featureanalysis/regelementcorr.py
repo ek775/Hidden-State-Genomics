@@ -213,7 +213,7 @@ def main(
         sae_path = f"{sae_dir}/layer_{layer_idx}.pt"
 
     if output_dir is None:
-        output_dir = f"gs://hsg-annotation-data/ef{exp_factor}/layer_{layer_idx}"
+        output_dir = f"gs://hidden-state-genomics/regelannotations/ef{exp_factor}/layer_{layer_idx}"
 
     # check pathing
     if not os.path.isfile(sae_path):
@@ -236,9 +236,14 @@ def main(
     # calculate correlations for each annotation
     print("=== Finding Correlations ===")
 
+    results = []
+
     for group, df in data:
 
         print(f"--- {group} ---")
+
+        # store correlations per feature
+        correlations = {}
 
         # get sequences described in bed data, pad some so vector not just 1s
         print("Gathering sequences...")
@@ -308,50 +313,90 @@ def main(
                         gap_token = "Z" * gap
                         gap_index = find_chunky_index(i1, tokens)
                         tokens.insert(gap_index, gap_token)
-            # extend the token level feature activations to provide feature values for each base and
-            # align with the annotation vectors
-            exp_features = []
-            for i, j in enumerate(features):
-                exp_features.extend([j for _ in range(len(tokens[i]))])
-            features = torch.stack(exp_features)
+
+            # To remedy the token-level activation versus per-base annotation alignment, we need to calculate the annotation
+            # presence for each token in the sequence. 
+
+            # token-level annotations
+            tok_lvl_annot = []
+            for t in tokens:
+                token_annotation = chunk_annotations[:len(t)]
+                chunk_annotations = chunk_annotations[len(t):]
+                tok_lvl_annot.append(np.mean(token_annotation))
             # convert to numpy array
-            features = features.cpu().numpy()
-            # clear cuda cache
-            if model.device != "cpu":
+            chunk_annotations = np.array(tok_lvl_annot)
+
+            # transpose to get features as rows and tokens as columns
+            # calculate pearson correlation for each feature against the annotation vector
+            if model.device.type != 'cpu':
+                features = features.cpu().numpy()
                 torch.cuda.empty_cache()
             
-            # iterate through transpose to get features as x, sequence idx as y
-            pearson_scores = []
-            xcorr_arrays = []
             for i, feat in enumerate(features.T):
-                # binarize the features
-                feat = binarize_features(feat, threshold=1.0)
-                # calculate the cross correlation
-                xcorr = correlate(chunk_annotations, feat)
-                xcorr_arrays.append(xcorr)
-                # get the pearson correlation
                 pearson = xcorr_pearson(feat, chunk_annotations)
-                pearson_scores.append(pearson)
-
-            # convert to numpy arrays
-            xcorr_arrays = np.array(xcorr_arrays)
-            pearson_scores = np.array(pearson_scores)
-
-            # flush to disk OR write to gcloud bucket
-            if output_dir.startswith("gs://"):
-                # write to gcloud bucket
-                with TemporaryFile() as temp_file:
-                    np.savez(temp_file, pearson_scores=pearson_scores, xcorr_arrays=xcorr_arrays)
-                    temp_file.seek(0)
-                    gcloud_upload(temp_file, output_dir.split("/")[2], f"{'/'.join(output_dir.split("/")[-2:])}/{group}/{num}.npz")
-            else:
-                # write to local disk
-                np.savez(f"{output_dir}/{group}/{num}.npz", pearson_scores=pearson_scores, xcorr_arrays=xcorr_arrays)
+                if not correlations.get(i):
+                    correlations[i] = [pearson]
+                else:
+                    correlations[i].append(pearson)
 
         # end of chunk loop
 
+        # calculate descriptive statistics for the correlations
+        print("Calculating descriptive statistics...")
+        for i, scores in correlations.items():
+            scores = np.array(scores)
+            mean_score = np.mean(scores)
+            std_score = np.std(scores)
+            median_score = np.median(scores)
+            max_score = np.max(scores)
+            min_score = np.min(scores)
+
+            # replace raw scores with descriptive statistics
+            correlations[i] = {
+                "idx": i,
+                "mean": mean_score,
+                "std": std_score,
+                "median": median_score,
+                "max": max_score,
+                "min": min_score
+            }
+
+        # sort the dictionary by mean score
+        # take the top 5 features
+        correlations = sorted(correlations.items(), key=lambda item: item[1]['mean'], reverse=True)[:5]
+        print(correlations)
+
+        # flatten the 5 best features into a single dictionary, later convert to csv
+        best_features = {}
+        for i, d in enumerate(correlations):
+            best_features[f"feature_{i+1}_idx"] = d[1]['idx']
+            best_features[f"feature_{i+1}_mean"] = d[1]['mean']
+            best_features[f"feature_{i+1}_std"] = d[1]['std']
+            best_features[f"feature_{i+1}_median"] = d[1]['median']
+            best_features[f"feature_{i+1}_max"] = d[1]['max']
+            best_features[f"feature_{i+1}_min"] = d[1]['min']
+
+        best_features["track_name"] = group
+        best_features["num_sequences"] = num
+
+        results.append(best_features)
+
     # end of group loop
-            
+    print("Saving results...")
+    results_df = pd.DataFrame(results)
+    results_df = results_df.set_index("track_name")
+
+    # upload to GCS
+    if output_dir.startswith("gs://"):
+        with TemporaryFile() as temp_file:
+            results_df.to_csv(temp_file, index=True)
+            temp_file.seek(0)
+            gcloud_upload(temp_file, bucket_name=output_dir.split("/")[2], destination_blob_name=output_dir)
+
+    else:
+        # save to local directory
+        results_df.to_csv(f"{output_dir}/results.csv", index=True)
+
     print("=== Done ===")
     print(f"Results saved to {output_dir}")
 
