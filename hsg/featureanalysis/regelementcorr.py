@@ -10,7 +10,7 @@ import numpy as np
 from biocommons.seqrepo import SeqRepo
 
 from hsg.stattools.features import get_latent_model
-from hsg.stattools.crosscorr import xcorr_pearson
+from hsg.stattools.crosscorr import xcorr_pearson, cross_correlation
 from scipy.signal import correlate
 from google.cloud import storage
 
@@ -237,13 +237,20 @@ def main(
     print("=== Finding Correlations ===")
 
     results = []
+    track_num = 0
 
     for group, df in data:
 
         print(f"--- {group} ---")
+        track_num += 1
+
+        # debugging
+#        if track_num > 1:
+#            break
 
         # store correlations per feature
         correlations = {}
+        normxcorr = {}
 
         # get sequences described in bed data, pad some so vector not just 1s
         print("Gathering sequences...")
@@ -331,25 +338,33 @@ def main(
             if model.device.type != 'cpu':
                 features = features.cpu().numpy()
                 torch.cuda.empty_cache()
-            
+
             for i, feat in enumerate(features.T):
                 pearson = xcorr_pearson(feat, chunk_annotations)
+                nxcorr = cross_correlation(feat, chunk_annotations)
+
+                # normalized cross-correlation can follow suit with pearson
                 if not correlations.get(i):
                     correlations[i] = [pearson]
+                    normxcorr[i] = [nxcorr]
                 else:
                     correlations[i].append(pearson)
+                    normxcorr[i].append(nxcorr)
 
         # end of chunk loop
 
-        # calculate descriptive statistics for the correlations
+        # calculate descriptive statistics for pearson correlations
+        # normalized cross-correlation follows suit (descriptive / qualitative data)
         print("Calculating descriptive statistics...")
         for i, scores in correlations.items():
             scores = np.array(scores)
+            normxcorr[i] = np.array(normxcorr[i])
             mean_score = np.mean(scores)
             std_score = np.std(scores)
             median_score = np.median(scores)
             max_score = np.max(scores)
             min_score = np.min(scores)
+            mean_normxcorr = np.mean(normxcorr[i])
 
             # replace raw scores with descriptive statistics
             correlations[i] = {
@@ -358,7 +373,8 @@ def main(
                 "std": std_score,
                 "median": median_score,
                 "max": max_score,
-                "min": min_score
+                "min": min_score,
+                "avglag(normxcorr)": mean_normxcorr
             }
 
         # sort the dictionary by mean score
@@ -369,17 +385,21 @@ def main(
         # flatten the 5 best features into a single dictionary, later convert to csv
         best_features = {}
         for i, d in enumerate(correlations):
-            best_features[f"feature_{i+1}_idx"] = d[1]['idx']
-            best_features[f"feature_{i+1}_mean"] = d[1]['mean']
-            best_features[f"feature_{i+1}_std"] = d[1]['std']
-            best_features[f"feature_{i+1}_median"] = d[1]['median']
-            best_features[f"feature_{i+1}_max"] = d[1]['max']
-            best_features[f"feature_{i+1}_min"] = d[1]['min']
+            best_features[f"f{i+1}_idx"] = d[1]['idx']
+            best_features[f"f{i+1}_mean"] = d[1]['mean']
+            best_features[f"f{i+1}_std"] = d[1]['std']
+            best_features[f"f{i+1}_median"] = d[1]['median']
+            best_features[f"f{i+1}_max"] = d[1]['max']
+            best_features[f"f{i+1}_min"] = d[1]['min']
+            best_features[f"f{i+1}_avglag(normxcorr)"] = d[1]['avglag(normxcorr)']
 
         best_features["track_name"] = group
         best_features["num_sequences"] = num
 
         results.append(best_features)
+
+        # debugging
+#        print(f"best features for {group}: {best_features}")
 
     # end of group loop
     print("Saving results...")
@@ -391,7 +411,11 @@ def main(
         with TemporaryFile() as temp_file:
             results_df.to_csv(temp_file, index=True)
             temp_file.seek(0)
-            gcloud_upload(temp_file, bucket_name=output_dir.split("/")[2], destination_blob_name=output_dir)
+            gcloud_upload(
+                temp_file, 
+                bucket_name=output_dir.split("/")[2], 
+                destination_blob_name='/'.join(output_dir.split("/")[3:])                      
+            )
 
     else:
         # save to local directory

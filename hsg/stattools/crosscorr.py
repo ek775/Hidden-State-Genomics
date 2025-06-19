@@ -185,9 +185,12 @@ def cross_correlation(features: np.array, annotation_array: np.array) -> np.ndar
     assert annotation_array.ndim == 1, "Annotation array must be a 1D array."
 
     # Compute the cross-correlation
-    cross_corr = np.correlate(features, annotation_array, mode='full')
+    cross_corr = np.correlate(features, annotation_array)
     # Normalize the cross-correlation
     cross_corr = cross_corr / ( np.sqrt(np.sum(features**2) * np.sum(annotation_array**2)) )
+    # Some features will be inactive for the entire length of the sequence, so we need to handle NaN values
+    # by replacing them with 0
+    cross_corr = np.nan_to_num(cross_corr, copy=False)
 
     return cross_corr
 
@@ -202,8 +205,13 @@ def xcorr_pearson(features: np.array, annotation_array: np.array) -> np.float64:
     assert annotation_array.ndim == 1, "Annotation array must be a 1D array."
 
     # Compute the Pearson correlation coefficient
-    corr = np.corrcoef(features, annotation_array)[0, 1]
-    return corr
+    corr = np.corrcoef(features, annotation_array)
+    # Because some features are inactive for the entire length of the sequence, we need to handle NaN values
+    # by replacing them with 0
+    corr = np.nan_to_num(corr, copy=False)
+
+    return corr[0,1]
+
 
 
 ##################################################################################################################
