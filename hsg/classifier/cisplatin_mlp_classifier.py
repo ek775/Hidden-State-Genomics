@@ -23,11 +23,9 @@ BATCH_SIZE = 32
 EPOCHS = 10
 LEARNING_RATE = 1e-3
 
-
 def one_hot_encode(seq):
     mapping = {'A': [1, 0, 0, 0], 'C': [0, 1, 0, 0], 'G': [0, 0, 1, 0], 'T': [0, 0, 0, 1], 'N': [0, 0, 0, 0]}
     return torch.tensor([mapping.get(base, [0, 0, 0, 0]) for base in seq], dtype=torch.float32)
-
 
 def fetch_sequence(chrom, start, end, strand, fasta):
     seq = fasta[chrom][start:end].seq.upper()
@@ -35,10 +33,9 @@ def fetch_sequence(chrom, start, end, strand, fasta):
         seq = str(Seq(seq).reverse_complement())
     return seq
 
-
 def process_labeled_bed_file(bed_path, fasta):
     data = []
-    fasta_chroms = set(fasta.keys())  # Get set of all chromosomes in FASTA
+    fasta_chroms = set(fasta.keys())
     with open(bed_path) as f:
         for line in f:
             parts = line.strip().split("\t")
@@ -47,16 +44,15 @@ def process_labeled_bed_file(bed_path, fasta):
             chrom, start, end = parts[0], int(parts[1]), int(parts[2])
             strand = parts[5] if len(parts) > 5 else '+'
             label = int(parts[-1])
-            
+
             if chrom not in fasta_chroms:
                 print(f"Warning: Chromosome {chrom} not found in FASTA. Skipping this entry.")
                 continue
-            
+
             seq = fetch_sequence(chrom, start, end, strand, fasta)
             encoded = one_hot_encode(seq).flatten()
-            data.append((encoded, label))
+            data.append(((encoded, chrom, start, end, strand, seq), label))
     return data
-
 
 def pad_or_truncate(tensor, target_len):
     current_len = tensor.shape[0]
@@ -67,13 +63,11 @@ def pad_or_truncate(tensor, target_len):
         return F.pad(tensor, (0, pad_len))
     return tensor
 
-
 def shuffle_labels(data):
     sequences = [x for x, y in data]
     labels = [y for x, y in data]
     random.shuffle(labels)
     return list(zip(sequences, labels))
-
 
 class SequenceDataset(Dataset):
     def __init__(self, data):
@@ -84,8 +78,7 @@ class SequenceDataset(Dataset):
 
     def __getitem__(self, idx):
         x, y = self.data[idx]
-        return x, torch.tensor(y, dtype=torch.float32)
-
+        return x[0], torch.tensor(y, dtype=torch.float32)
 
 class MLPClassifier(nn.Module):
     def __init__(self, input_dim):
@@ -100,7 +93,6 @@ class MLPClassifier(nn.Module):
         x = torch.sigmoid(self.fc3(x)).squeeze(1)
         return x
 
-
 def log_metrics(log_path, roc, cm, report):
     with open(log_path, 'a') as log:
         log.write(f"Run at {datetime.datetime.now()}\n")
@@ -113,11 +105,52 @@ def log_metrics(log_path, roc, cm, report):
         log.write(report)
         log.write("\n" + "="*60 + "\n")
 
+def save_predictions(output_path, meta, y_true, y_scores):
+    from collections import defaultdict
+    grouped = defaultdict(list)
+    flat_rows = []
 
-def save_predictions(output_path, y_true, y_scores):
-    df = pd.DataFrame({'true_label': y_true, 'score': y_scores})
-    df.to_csv(output_path, index=False)
+    for (chrom, start, end, strand, seq), true, score in zip(meta, y_true, y_scores):
+        pred = 1 if score > 0.5 else 0
+        if true == 1 and pred == 1:
+            category = "True Positive"
+        elif true == 0 and pred == 0:
+            category = "True Negative"
+        elif true == 0 and pred == 1:
+            category = "False Positive"
+        else:
+            category = "False Negative"
 
+        row = {
+            "chrom": chrom,
+            "start": start,
+            "end": end,
+            "strand": strand,
+            "sequence": seq,
+            "true_label": true,
+            "score": score,
+            "prediction": pred,
+            "category": category
+        }
+
+        grouped[category].append(row)
+        flat_rows.append(row)
+
+    # Write human-readable output with section headers
+    with open(output_path, 'w') as f:
+        for category in ["True Positive", "True Negative", "False Positive", "False Negative"]:
+            entries = grouped.get(category, [])
+            if not entries:
+                continue
+            f.write(f"### {category} ###\n")
+            df = pd.DataFrame(entries)
+            df.to_csv(f, index=False)
+            f.write("\n")
+
+    # Write machine-readable flat output
+    flat_output_path = output_path.replace(".csv", "_flat.csv")
+    pd.DataFrame(flat_rows).to_csv(flat_output_path, index=False)
+    print(f"Saved machine-readable predictions to {flat_output_path}")
 
 def main():
     parser = argparse.ArgumentParser(description="Train MLP classifier on one-hot encoded genomic sequences")
@@ -132,13 +165,12 @@ def main():
 
     print("Processing labeled BED file...")
     labeled_data = process_labeled_bed_file(args.labeled_bed, fasta)
-    all_data = [(pad_or_truncate(x, INPUT_DIM), y) for x, y in labeled_data]
+    all_data = [((pad_or_truncate(x[0], INPUT_DIM), x[1], x[2], x[3], x[4], x[5]), y) for x, y in labeled_data]
 
     if args.shuffle_labels:
         print("Shuffling labels for sanity check...")
         all_data = shuffle_labels(all_data)
 
-    # Split dataset, stratify on labels
     train_data, test_data = train_test_split(all_data, test_size=0.3, stratify=[y for _, y in all_data])
     print(f"Train samples: {len(train_data)}")
     print(f"Test samples: {len(test_data)}")
@@ -150,7 +182,6 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
     criterion = nn.BCELoss()
 
-    # Training loop
     for epoch in range(EPOCHS):
         model.train()
         total_loss = 0
@@ -163,7 +194,6 @@ def main():
             total_loss += loss.item()
         print(f"Epoch {epoch + 1}, Loss: {total_loss:.4f}")
 
-    # Evaluation
     model.eval()
     y_true, y_scores = [], []
     with torch.no_grad():
@@ -172,9 +202,9 @@ def main():
             y_true.extend(y.numpy())
             y_scores.extend(output.numpy())
 
+    meta = [(x[1], x[2], x[3], x[4], x[5]) for x, _ in test_data]
     y_pred = [1 if s > 0.5 else 0 for s in y_scores]
 
-    # Metrics
     roc = roc_auc_score(y_true, y_scores)
     cm = confusion_matrix(y_true, y_pred)
     report = classification_report(y_true, y_pred, digits=4)
@@ -187,13 +217,10 @@ def main():
     print("Classification Report:")
     print(report)
 
-    # Log to file
     log_metrics(args.log_file, roc, cm, report)
 
-    # Optionally save predictions
     if args.pred_output:
-        save_predictions(args.pred_output, y_true, y_scores)
-
+        save_predictions(args.pred_output, meta, y_true, y_scores)
 
 if __name__ == "__main__":
     main()

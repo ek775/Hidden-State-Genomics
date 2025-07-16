@@ -47,3 +47,20 @@ Classification Report:
 weighted avg     0.5573    0.6326    0.5633     39572
 
 ============================================================
+Run at 2025-07-14 20:16:56.171904
+ROC AUC Score: 0.4963
+Confusion Matrix:
+                 Predicted Negative    Predicted Positive
+Actual Negative        23065 (TN)             3298 (FP)
+Actual Positive        11556 (FN)             1653 (TP)
+Classification Report:
+              precision    recall  f1-score   support
+
+         0.0     0.6662    0.8749    0.7564     26363
+         1.0     0.3339    0.1251    0.1820     13209
+
+    accuracy                         0.6246     39572
+   macro avg     0.5000    0.5000    0.4692     39572
+weighted avg     0.5553    0.6246    0.5647     39572
+
+============================================================
