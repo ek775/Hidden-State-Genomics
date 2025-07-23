@@ -1,7 +1,7 @@
 # Hidden-State-Genomics
-ClinGen is starting to explore the utility of machine learning tools for their curation efforts, and the aim here is to predict HGVS annotations based on nucleotide sequence information alone, while providing interpretable feature activations to explain model behavior. This provides two key benefits over tools like AlphaMissense: (1) predictions can be made on variants that occur in non-coding regions, and (2) feature activations can be used to explain model behavior and identify potential gaps in literature being considered.
+Advances in Mechanistic Interpretability have made it possible to decompose neural network activations into interpretable features via sparse auto-encoders. These features represent concepts that are learned by the model, and can be used to understand how a neural network makes its predictions. Early mechanistic interpretability studies on protein language models have led to speculation that studying the internals of these models may reveal novel biology, however, investigating this theory poses a difficult technical challenge. We attempt to answer this question by exploring relationships between features extracted from genomic language model embeddings and predicted RNA structures for novel cisplatin-RNA complexes. 
 
-***Collaborator Setup Instructions***
+***Setup Instructions***
 - Clone the repository
 
 - Download the ClinGen and ClinVar datasets from the google drive shared folder
