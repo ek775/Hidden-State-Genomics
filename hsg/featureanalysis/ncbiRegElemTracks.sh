@@ -13,3 +13,5 @@ for expansion_size in "${expansion_sizes[@]}"; do
             --exp_factor $expansion_size \
     ; done \
 ; done
+
+sudo shutdown -h now

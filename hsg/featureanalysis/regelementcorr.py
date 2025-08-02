@@ -111,9 +111,18 @@ def get_sequences_from_dataframe(df: pd.DataFrame, seqrepo: SeqRepo, pad_size: i
         # Since we're grouping by track name, we can still use the other tracks
         try:
             seq = seqrepo.fetch(namespace="GRCh38", alias=chrom, start=start, end=end)
-            sequences.append(seq)
         except:
             print(f"Error fetching sequence for {chrom}:{start}-{end}")
+            continue
+
+        if row['strand'].strip() == '+':
+            sequences.append(seq)
+        elif row['strand'].strip() == '-':
+            # reverse complement the sequence if on the negative strand
+            seq = seq[::-1].translate(str.maketrans('ACGT', 'TGCA'))
+            sequences.append(seq)
+        else:
+            print(f"Unknown strand for {chrom}:{start}-{end}: {row['strand']}")
             continue
 
     return sequences
@@ -379,12 +388,11 @@ def main(
 
         # sort the dictionary by mean score
         # take the top 5 features
-        correlations = sorted(correlations.items(), key=lambda item: item[1]['mean'], reverse=True)[:5]
-        print(correlations)
+        pearson = sorted(correlations.items(), key=lambda item: item[1]['mean'], reverse=True)[:5]
 
         # flatten the 5 best features into a single dictionary, later convert to csv
         best_features = {}
-        for i, d in enumerate(correlations):
+        for i, d in enumerate(pearson):
             best_features[f"f{i+1}_idx"] = d[1]['idx']
             best_features[f"f{i+1}_mean"] = d[1]['mean']
             best_features[f"f{i+1}_std"] = d[1]['std']
@@ -393,13 +401,25 @@ def main(
             best_features[f"f{i+1}_min"] = d[1]['min']
             best_features[f"f{i+1}_avglag(normxcorr)"] = d[1]['avglag(normxcorr)']
 
+        # sort the dictionary by normxcorr
+        # take the top 5 features
+        normxcorr = sorted(correlations.items(), key=lambda item: item[1]['avglag(normxcorr)'], reverse=True)[:5]
+        for i, d in enumerate(normxcorr):
+            best_features[f"nxf{i+1}_idx"] = d[1]['idx']
+            best_features[f"nxf{i+1}_mean"] = d[1]['mean']
+            best_features[f"nxf{i+1}_std"] = d[1]['std']
+            best_features[f"nxf{i+1}_median"] = d[1]['median']
+            best_features[f"nxf{i+1}_max"] = d[1]['max']
+            best_features[f"nxf{i+1}_min"] = d[1]['min']
+            best_features[f"nxf{i+1}_avglag(normxcorr)"] = d[1]['avglag(normxcorr)']
+
+        # metadata and append to results
         best_features["track_name"] = group
         best_features["num_sequences"] = num
 
         results.append(best_features)
+        print(f"Top Scores [{group}]: {best_features['f1_idx']}| {best_features['f1_mean']} - {best_features['nxf1_idx']}| {best_features['nxf1_mean']}")
 
-        # debugging
-#        print(f"best features for {group}: {best_features}")
 
     # end of group loop
     print("Saving results...")
