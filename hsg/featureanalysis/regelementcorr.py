@@ -21,12 +21,14 @@ warnings.filterwarnings("ignore")
 ##################################################################################################################################
 # functions
 ###################################################################################################################################
-def read_bed_file(bed_file: str) -> pd.DataFrame:
+def read_bed_file(bed_file: str, max_columns: int = 12, limit: int = None) -> pd.DataFrame:
     """
     Read a BED file and return a DataFrame.
     
     Args:
         bed_file (str): Path to the BED file.
+        max_columns (int): Maximum number of columns to read from the BED file.
+        limit (int): Maximum number of rows to read from the BED file. If None, all rows are read.
         
     Returns:
         pd.DataFrame: DataFrame containing the BED file data.
@@ -41,6 +43,7 @@ def read_bed_file(bed_file: str) -> pd.DataFrame:
         # Read each line in the file
         # readlines() is used to get total lines for tqdm, but if we have memory issues from 
         # that temporary object we will likely have bigger issues later anyway
+        n_lines = 0
         for line in tqdm(f.readlines()):
 
             # filter header lines
@@ -50,9 +53,14 @@ def read_bed_file(bed_file: str) -> pd.DataFrame:
             items = line.strip().split('\t')
 
             rows.append(items)
+            n_lines += 1
+            # limit the number of rows if specified
+            if limit and n_lines >= limit:
+                break
 
         # if the rows are ragged, truncate the rows to the shortest length
         min_length = min(len(row) for row in rows)
+        min_length = min(min_length, max_columns)  # ensure we don't exceed max_columns
         rows = [row[:min_length] for row in rows]
 
         # Create a DataFrame from the rows
@@ -60,24 +68,24 @@ def read_bed_file(bed_file: str) -> pd.DataFrame:
 
         # Convert the columns to appropriate data types
         try:
-            df['chrom'] = df['chrom'].astype(str)
-            df['chromStart'] = df['chromStart'].astype(int)
-            df['chromEnd'] = df['chromEnd'].astype(int)
-            df['name'] = df['name'].astype(str)
-            df['score'] = df['score'].astype(int)
-            df['strand'] = df['strand'].astype(str)
-            df['thickStart'] = df['thickStart'].astype(int)
-            df['thickEnd'] = df['thickEnd'].astype(int)
+            df['chrom'] = df['chrom'].apply(str).astype(str)
+            df['chromStart'] = df['chromStart'].apply(int).astype(int)
+            df['chromEnd'] = df['chromEnd'].apply(int).astype(int)
+            df['name'] = df['name'].apply(str).astype(str)
+            df['score'] = df['score'].apply(float).astype(float)
+            df['strand'] = df['strand'].apply(str).astype(str)
+            df['thickStart'] = df['thickStart'].apply(int).astype(int)
+            df['thickEnd'] = df['thickEnd'].apply(int).astype(int)
 
-            df['itemRgb'] = df['itemRgb'].astype(str)
+            df['itemRgb'] = df['itemRgb'].apply(str).astype(str)
             df['itemRgb'] = df['itemRgb'].apply(lambda x: list(map(int, x.split(','))) if x != '.' else [])
 
-            df['blockCount'] = df['blockCount'].astype(int)
+            df['blockCount'] = df['blockCount'].apply(int).astype(int)
 
-            df['blockSizes'] = df['blockSizes'].astype(str)
+            df['blockSizes'] = df['blockSizes'].apply(str).astype(str)
             df['blockSizes'] = df['blockSizes'].apply(lambda x: list(map(int, x.split(','))) if x != '.' else [])
 
-            df['blockStarts'] = df['blockStarts'].astype(str)
+            df['blockStarts'] = df['blockStarts'].apply(str).astype(str)
             df['blockStarts'] = df['blockStarts'].apply(lambda x: list(map(int, x.split(','))) if x != '.' else [])
 
         except KeyError:
@@ -101,7 +109,7 @@ def get_sequences_from_dataframe(df: pd.DataFrame, seqrepo: SeqRepo, pad_size: i
     """
     sequences = []
 
-    for _, row in df.iterrows():
+    for _, row in tqdm(df.iterrows(), total=len(df), desc="Fetching sequences"):
 
         chrom = row['chrom']
         start = row['chromStart'] - pad_size # grabbing a bit of additional sequence so we have 0s and 1s in the annotation vector
