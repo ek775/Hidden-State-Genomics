@@ -11,6 +11,7 @@ for expansion_size in "${expansion_sizes[@]}"; do
         python -m hsg.cisplatinRNA.CNNtrain \
             --cisplatin_positive data/cisplatin_positive.bed \
             --cisplatin_negative data/cisplatin_negative.bed \
+            --sae_dir checkpoints/hidden-state-genomics/ef${expansion_size}/sae/layer_${i}.pt \
             --batch_size 16 \
             --epochs 100 \
             --layer_idx $i \
