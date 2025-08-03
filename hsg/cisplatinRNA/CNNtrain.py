@@ -4,18 +4,18 @@ import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 from torch.utils.tensorboard import SummaryWriter
-import pandas as pd
 
 from hsg.sae.protocol.checkpoint import History
 from hsg.cisplatinRNA.CNNhead import CNNHead
-from hsg.featureanalysis.regelementcorr import read_bed_file, get_sequences_from_dataframe, gcloud_upload
+from hsg.featureanalysis.regelementcorr import read_bed_file, get_sequences_from_dataframe
 from hsg.stattools.features import get_latent_model
 
 from biocommons.seqrepo import SeqRepo
+from google.cloud import storage
+import pandas as pd
 
 from dotenv import load_dotenv
 from tqdm import tqdm
-from tempfile import TemporaryFile
 import os
 
 load_dotenv()
@@ -26,7 +26,7 @@ def prepare_data(cisplatin_positive, cisplatin_negative) -> tuple[list, list, li
 
     print(" --- Reading cisplatin BED files --- ")
     seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
-    positive_df = read_bed_file(cisplatin_positive, max_columns=6)
+    positive_df = read_bed_file(cisplatin_positive, max_columns=6,) # limit=1000) # limit set for debugging
     print("Retrieving sequences from positive BED file...")
     positive_sequences = get_sequences_from_dataframe(positive_df, seqrepo=seqrepo, pad_size=0)
 #    limit = len(positive_sequences) # there are a lot of negative sequences, so we limit how many we read to save time/memory
@@ -34,7 +34,7 @@ def prepare_data(cisplatin_positive, cisplatin_negative) -> tuple[list, list, li
     print(f"Found {len(positive_sequences)} unique positive sequences.")
     del positive_df  # free memory
 
-    negative_df = read_bed_file(cisplatin_negative, max_columns=6, limit=None)  # read all negative sequences
+    negative_df = read_bed_file(cisplatin_negative, max_columns=6,) # limit=1000)  # limit set for debugging
     print(f"Retrieving sequences from negative BED file...")
     negative_sequences = get_sequences_from_dataframe(negative_df, seqrepo=seqrepo, pad_size=0)
     negative_sequences = list(set(negative_sequences))  # remove duplicates
@@ -63,10 +63,10 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
     print(f"Training {condition} model for layer {layer_idx}...")
     # for early stopping
     tracker = History(patience=early_stop_patience, layer=layer_idx)
-    log_dir = os.path.join(output_dir, f"layer_{layer_idx}", condition)
+    log_dir = os.path.join(output_dir, condition)
 
     # for tensorboard logging
-    train_log_writer = SummaryWriter(log_dir=os.path.join(log_dir, f"layer_{layer_idx}")) 
+    train_log_writer = SummaryWriter(log_dir=log_dir) 
     layout = {
         f"layer_{layer_idx}": {
             "Accuracy": ["Multiline", ["Accuracy/Train", "Accuracy/Val"]],
@@ -130,6 +130,11 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
             predictions.extend(predicted)
             labels.extend(label)
 
+            # memory cleanup fail-safe
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        
+        # training epoch summary
         avg_train_loss = sum(train_losses) / len(train_losses)
         avg_train_accuracy = accuracy_score(labels, predictions)
         print(f"Train Loss: {avg_train_loss:.4f} | Train Accuracy: {avg_train_accuracy:.4f}")
@@ -162,11 +167,15 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
                 predictions.extend(predicted)
                 labels.extend(label)
 
+                # memory cleanup fail-safe
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            
+            # validation epoch summary
             avg_val_loss = sum(val_losses) / len(val_losses)
             avg_val_accuracy = accuracy_score(labels, predictions)
             print(f"Validation Loss: {avg_val_loss:.4f} | Validation Accuracy: {avg_val_accuracy:.4f}")
-
-
+        
         # checkpoint logic
         tracker.update(prediction_head, avg_train_accuracy, avg_val_accuracy, epoch)
         if tracker.early_stop:
@@ -179,25 +188,20 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
         train_log_writer.add_scalar(f"Accuracy/Val", avg_val_accuracy, epoch)
         train_log_writer.flush()
 
-        # memory cleanup fail-safe
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-
     ### Save Results ###
 
     print("Saving results...")
 
     # upload to GCS
     if output_dir.startswith("gs://"):
-        with TemporaryFile() as temp_file:
-            torch.save(prediction_head, temp_file)
-            temp_file.seek(0)
-            gcloud_upload(
-                temp_file, 
-                bucket_name=output_dir.split("/")[2], 
-                destination_blob_name='/'.join(output_dir.split("/")[3:])                      
-            )
+        client = storage.Client()
+        bucket_name = output_dir.split("/")[2]
+        blob_name = '/'.join(output_dir.split("/")[3:])
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(f'{blob_name}{condition}.pt')
+        with blob.open("wb", ignore_flush=True) as f:
+            torch.save(prediction_head, f)
+        print(f"Model saved to {output_dir} as {blob_name}{condition}.pt")
 
     else:
         # save to local directory
@@ -228,14 +232,14 @@ def evaluate(upstream_model, prediction_head, test_data, condition:str, batch_si
         
         for sample in tqdm([test_data[i:i + batch_size] for i in range(0, len(test_data), batch_size)], desc=f"Evaluating {condition} model"):
             seqs = [s[0] for s in sample]
-            labels = [s[1] for s in sample]
+            seq_labels = [s[1] for s in sample]
             # get sequence tensor from upstream model, pad to max length
             if condition == "features":
                 seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s), 1000) for s in seqs]).to(device)
             else:  # condition == "embeddings"
                 seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s, return_hidden_states=True)[1], 1000) for s in seqs]).to(device)
 
-            label_tensor = torch.stack([torch.as_tensor(l, dtype=torch.float) for l in labels]).to(device)
+            label_tensor = torch.stack([torch.as_tensor(l, dtype=torch.float) for l in seq_labels]).to(device)
 
             output = prediction_head(seq_tensor)
             loss = nn.CrossEntropyLoss()(output, label_tensor)
@@ -253,33 +257,49 @@ def evaluate(upstream_model, prediction_head, test_data, condition:str, batch_si
                 "loss": loss.item(),
             })
 
-        accuracy = accuracy_score(labels, predictions)
+            # memory cleanup fail-safe
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
+        # calculate overall accuracy and average loss
+        accuracy = accuracy_score(labels, predictions)
         avg_test_loss = sum(test_losses) / len(test_losses)
         print(f"Average Test Loss: {avg_test_loss:.4f}")
         print(f"Average Test Accuracy: {accuracy:.4f}")
+
         print("Classification Report:")
-        print(classification_report([r['actual'] for r in results], [r['predicted'] for r in results]))
+        y_true = []
+        y_pred = []
+        for r in results:
+            y_true.extend(r['actual'])
+            y_pred.extend(r['predicted'])
+        print(classification_report(y_true, y_pred))
         df = pd.DataFrame(results)
 
     # upload to GCS
     if output_dir.startswith("gs://"):
-        with TemporaryFile() as temp_file:
-            df.to_csv(temp_file, index=True)
-            temp_file.seek(0)
-            gcloud_upload(
-                temp_file, 
-                bucket_name=output_dir.split("/")[2], 
-                destination_blob_name='/'.join(output_dir.split("/")[3:])                      
-            )
+        client = storage.Client()
+        bucket_name = output_dir.split("/")[2]
+        blob_name = '/'.join(output_dir.split("/")[3:])
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(f'{blob_name}{condition}_results.csv')
+        with blob.open("wb", ignore_flush=True) as f:
+            df.to_csv(f, index=True)
+        print(f"Results saved to {output_dir} as {blob_name}{condition}_results.csv")
 
     else:
         # save to local directory
         if os.path.exists(output_dir):
-            df.to_csv(temp_file, index=True)
+            df.to_csv(os.path.join(output_dir, f'{condition}_results.csv'), index=True)
         else:
             os.makedirs(output_dir, exist_ok=True)
-            df.to_csv(temp_file, index=True)
+            df.to_csv(os.path.join(output_dir, f'{condition}_results.csv'), index=True)
+
+    # remove the prediction head from memory
+    prediction_head.to("cpu")
+    del prediction_head
+    import gc
+    gc.collect()
 
     print("=== Done ===")
     print(f"Results saved to {output_dir}")
@@ -290,7 +310,8 @@ def evaluate(upstream_model, prediction_head, test_data, condition:str, batch_si
 
 ### Compose everything into a main function
 
-def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, early_stop_patience=10, epochs=100, batch_size=32, learning_rate=0.001, sae_dir=None, output_path=None):
+def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, early_stop_patience=10, 
+         epochs=100, batch_size=32, learning_rate=0.001, sae_dir=None, output_path=None):
     """
     Conduct training and evaluation of a CNN model for RNA sequence classification.
     """
@@ -305,12 +326,11 @@ def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, ear
     
     # Load data
     train_data, validation_data, test_data = prepare_data(cisplatin_positive, cisplatin_negative)
-    # Initialize models
+    # Initialize NTv2 model + SAE
     upstream_model = get_latent_model(os.environ["NT_MODEL"], layer_idx, sae_path=sae_path)
-    feature_head = CNNHead(input_dim=upstream_model.sae.dict_size, seq_length=1000, output_dim=2)
-    embedding_head = CNNHead(input_dim=upstream_model.parent_model.esm.encoder.layer[layer_idx].output.dense.out_features, seq_length=1000, output_dim=2)
 
     # Train embedding model
+    embedding_head = CNNHead(input_dim=upstream_model.parent_model.esm.encoder.layer[layer_idx].output.dense.out_features, seq_length=1000, output_dim=2)
     embedding_head = train(
         upstream_model, 
         embedding_head, 
@@ -325,9 +345,11 @@ def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, ear
         output_dir=output_path
     )
 
-    evaluate(upstream_model=upstream_model, prediction_head=embedding_head, test_data=test_data, condition="embeddings", batch_size=batch_size, output_dir=output_path)
+    evaluate(upstream_model=upstream_model, prediction_head=embedding_head, test_data=test_data, condition="embeddings", 
+             batch_size=batch_size, output_dir=output_path)
 
     # Train feature model
+    feature_head = CNNHead(input_dim=upstream_model.sae.dict_size, seq_length=1000, output_dim=2)
     feature_head = train(
         upstream_model, 
         feature_head, 
@@ -342,9 +364,14 @@ def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, ear
         output_dir=output_path
     )
 
-    evaluate(upstream_model=upstream_model, prediction_head=feature_head, test_data=test_data, condition="features", batch_size=batch_size, output_dir=output_path)
+    evaluate(upstream_model=upstream_model, prediction_head=feature_head, test_data=test_data, condition="features", 
+             batch_size=batch_size, output_dir=output_path)
 
 
+
+
+
+# Entry point for the script
 if __name__ == "__main__":
     import argparse
 

@@ -10,8 +10,8 @@ class CNNHead(nn.Module):
         self.seq_length = seq_length
         self.output_dim = output_dim
         self.dropout_rate = dropout_rate
-        self.conv1 = nn.Conv1d(seq_length, input_dim//2, kernel_size=kernel_size, padding=int(0.5 * kernel_size))
-        self.conv2 = nn.Conv1d(input_dim//2, 64, kernel_size=kernel_size, padding=int(0.5 * kernel_size))
+        self.conv1 = nn.Conv1d(seq_length, input_dim//8, kernel_size=kernel_size, padding=int(0.5 * kernel_size))
+        self.conv2 = nn.Conv1d(input_dim//8, 64, kernel_size=kernel_size, padding=int(0.5 * kernel_size))
         self.pooling1 = nn.MaxPool1d(kernel_size=kernel_size, stride=6)
         self.dropout = nn.Dropout(dropout_rate)
         self.pooling2 = nn.MaxPool1d(kernel_size=4, stride=input_dim//self.pooling1.stride)
