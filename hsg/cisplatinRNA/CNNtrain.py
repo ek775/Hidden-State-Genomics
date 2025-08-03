@@ -49,6 +49,9 @@ def prepare_data(cisplatin_positive, cisplatin_negative) -> tuple[list, list, li
     return train_data, validation_data, test_data
 
 
+
+
+
 def train(upstream_model, prediction_head, train, validate, condition:str, 
           layer_idx, early_stop_patience=10, epochs=100, batch_size=32, learning_rate=0.001, output_dir:str=None):
     """
@@ -95,21 +98,24 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
 
     for epoch in range(epochs):
 
-        train = train_set[epoch % len(train_set)]
-        validate = validate_set[epoch % len(validate_set)]
+        train: list = train_set[epoch % len(train_set)]
+        validate: list = validate_set[epoch % len(validate_set)]
 
         # train & backprop
         train_losses = []
         labels = []
         predictions = []
-        for seq, label in tqdm(train, desc=f"Training Epoch {epoch+1}/{epochs} - {condition}"):
+        for sample in tqdm([train[i:i + batch_size] for i in range(0, len(train), batch_size)], desc=f"Training Epoch {epoch+1}/{epochs} - {condition}"):
+            seqs = [s[0] for s in sample]
+            seq_labels = [s[1] for s in sample]
 
+            # get sequence tensor from upstream model, pad to max length
             if condition == "features":
-                seq_tensor = upstream_model(seq[0], return_hidden_states=True)[1].to(device).squeeze(0)  # remove batch dimension
+                seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s), 1000) for s in seqs]).to(device)
             else:  # condition == "embeddings"
-                seq_tensor = upstream_model(seq[0]).to(device).squeeze(0) # remove batch dimension
+                seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s, return_hidden_states=True)[1], 1000) for s in seqs]).to(device)
 
-            label_tensor = torch.tensor(label, dtype=torch.float).to(device)
+            label_tensor = torch.stack([torch.as_tensor(l, dtype=torch.float) for l in seq_labels]).to(device)
 
             prediction_head.train()
             optimizer.zero_grad()
@@ -119,10 +125,10 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
             optimizer.step()
 
             train_losses.append(loss.item())
-            predicted = torch.argmax(output).item()
-            label = torch.argmax(label_tensor).item()
-            predictions.append(predicted)
-            labels.append(label)
+            predicted = torch.argmax(output, dim=1).tolist()
+            label = torch.argmax(label_tensor, dim=1).tolist()
+            predictions.extend(predicted)
+            labels.extend(label)
 
         avg_train_loss = sum(train_losses) / len(train_losses)
         avg_train_accuracy = accuracy_score(labels, predictions)
@@ -135,23 +141,26 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
             labels = []
             predictions = []
 
-            for seq, label in tqdm(validate, desc=f"Validating Epoch {epoch+1}/{epochs} - {condition}"):
+            for sample in tqdm([validate[i:i + batch_size] for i in range(0, len(validate), batch_size)], desc=f"Validating Epoch {epoch+1}/{epochs} - {condition}"):
+
+                seqs = [s[0] for s in sample]
+                seq_labels = [s[1] for s in sample]
 
                 if condition == "features":
-                    seq_tensor = upstream_model(seq[0], return_hidden_states=True)[1].to(device).squeeze(0)  # remove batch dimension
+                    seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s), 1000) for s in seqs]).to(device)
                 else:  # condition == "embeddings"
-                    seq_tensor = upstream_model(seq[0]).to(device).squeeze(0) # remove batch dimension
+                    seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s, return_hidden_states=True)[1], 1000) for s in seqs]).to(device)
 
-                label_tensor = torch.tensor(label, dtype=torch.float).to(device)
+                label_tensor = torch.stack([torch.as_tensor(l, dtype=torch.float) for l in seq_labels]).to(device)
 
                 output = prediction_head(seq_tensor)
                 loss = loss_function(output, label_tensor)
                 val_losses.append(loss.item())
 
-                predicted = torch.argmax(output).item()
-                label = torch.argmax(label_tensor).item()
-                predictions.append(predicted)
-                labels.append(label)
+                predicted = torch.argmax(output, dim=1).tolist()
+                label = torch.argmax(label_tensor, dim=1).tolist()
+                predictions.extend(predicted)
+                labels.extend(label)
 
             avg_val_loss = sum(val_losses) / len(val_losses)
             avg_val_accuracy = accuracy_score(labels, predictions)
@@ -204,7 +213,10 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
     return prediction_head
 
 
-def evaluate(upstream_model, prediction_head, test_data, condition:str, output_dir:str=None):
+
+
+
+def evaluate(upstream_model, prediction_head, test_data, condition:str, batch_size:int, output_dir:str=None):
     print("Evaluating model...")
     with torch.no_grad():
         prediction_head.eval()
@@ -213,27 +225,29 @@ def evaluate(upstream_model, prediction_head, test_data, condition:str, output_d
         labels = []
         predictions = []
         results = []
-
-        for seq, label in tqdm(test_data, desc="Evaluating"):
-            
+        
+        for sample in tqdm([test_data[i:i + batch_size] for i in range(0, len(test_data), batch_size)], desc=f"Evaluating {condition} model"):
+            seqs = [s[0] for s in sample]
+            labels = [s[1] for s in sample]
+            # get sequence tensor from upstream model, pad to max length
             if condition == "features":
-                seq_tensor = upstream_model(seq[0], return_hidden_states=True)[1].to(device).squeeze(0)  # remove batch dimension
+                seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s), 1000) for s in seqs]).to(device)
             else:  # condition == "embeddings"
-                seq_tensor = upstream_model(seq[0]).to(device).squeeze(0) # remove batch dimension
+                seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s, return_hidden_states=True)[1], 1000) for s in seqs]).to(device)
 
-            label_tensor = torch.tensor(label, dtype=torch.float).to(device)
+            label_tensor = torch.stack([torch.as_tensor(l, dtype=torch.float) for l in labels]).to(device)
 
             output = prediction_head(seq_tensor)
             loss = nn.CrossEntropyLoss()(output, label_tensor)
             test_losses.append(loss.item())
 
-            predicted = torch.argmax(output).item()
-            label = torch.argmax(label_tensor).item()
-            predictions.append(predicted)
-            labels.append(label)
+            predicted = torch.argmax(output, dim=1).tolist()
+            label = torch.argmax(label_tensor, dim=1).tolist()
+            predictions.extend(predicted)
+            labels.extend(label)
 
             results.append({
-                "sequence": seq[0],
+                "sequence": seqs,
                 "predicted": predicted,
                 "actual": label,
                 "loss": loss.item(),
@@ -269,6 +283,9 @@ def evaluate(upstream_model, prediction_head, test_data, condition:str, output_d
 
     print("=== Done ===")
     print(f"Results saved to {output_dir}")
+
+
+
 
 
 ### Compose everything into a main function
@@ -308,7 +325,7 @@ def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, ear
         output_dir=output_path
     )
 
-    evaluate(upstream_model=upstream_model, embedding_head=embedding_head, test_data=test_data, condition="embeddings", output_dir=output_path)
+    evaluate(upstream_model=upstream_model, prediction_head=embedding_head, test_data=test_data, condition="embeddings", batch_size=batch_size, output_dir=output_path)
 
     # Train feature model
     feature_head = train(
@@ -325,7 +342,7 @@ def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, ear
         output_dir=output_path
     )
 
-    evaluate(upstream_model=upstream_model, feature_head=feature_head, test_data=test_data, condition="features", output_dir=output_path)
+    evaluate(upstream_model=upstream_model, prediction_head=feature_head, test_data=test_data, condition="features", batch_size=batch_size, output_dir=output_path)
 
 
 if __name__ == "__main__":
