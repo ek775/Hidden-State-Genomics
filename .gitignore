@@ -167,15 +167,13 @@ genome_databases/clin_var-12-2024.tabbed.txt
 data/2024-05-23/
 data/2024-12-20/
 # clingen and clinvar datasets have similar issue
-data/erepo.tabbed.txt
 data/variant_summary.txt
 data/clingen_w_seqs.csv
+# ignore Nair et al. datasets
+data/A2780_Cisplatin_Binding
 
 # models are generally over the 100MB limit for github (free tier)
 checkpoints/
-
-# generally we don't need to save jupyter notebooks in the repository
-*.ipynb
 
 # ignore the test SQL database
 genome_databases/

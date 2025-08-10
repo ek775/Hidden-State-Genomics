@@ -1,9 +1,10 @@
 [project]
-name = "Hidden-State-Genomics"
-dynamic = ["version"]
+name = "HiddenStateGenomics"
+version = "0.0.1"
 description = "A project to identify interpretable features in language model embeddings of nucleotide sequences, and develop explainable AI-systems for variant effect prediction."
 authors = [
     { name = "Eliot Kmiec", email = "ek990@georgetown.edu" },
+    { name = "Samuel O'Brien", email = "sto31@georgetown.edu"},
     { name = "Matthew McCoy", email = "mdm299@georgetown.edu" }
 ]
 license = { text = "CC0-1.0" }
