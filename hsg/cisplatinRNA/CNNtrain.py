@@ -177,7 +177,7 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
             print(f"Validation Loss: {avg_val_loss:.4f} | Validation Accuracy: {avg_val_accuracy:.4f}")
         
         # checkpoint logic
-        tracker.update(prediction_head, avg_train_accuracy, avg_val_accuracy, epoch)
+        tracker.update(prediction_head, avg_train_loss, avg_val_loss, epoch)
         if tracker.early_stop:
             print(f"Early stopping at epoch {epoch}.")
             break
@@ -328,6 +328,9 @@ def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, ear
     train_data, validation_data, test_data = prepare_data(cisplatin_positive, cisplatin_negative)
     # Initialize NTv2 model + SAE
     upstream_model = get_latent_model(os.environ["NT_MODEL"], layer_idx, sae_path=sae_path)
+    # Freeze the upstream model weights
+    for param in upstream_model.parameters():
+        param.requires_grad = False
 
     # Train embedding model
     embedding_head = CNNHead(input_dim=upstream_model.parent_model.esm.encoder.layer[layer_idx].output.dense.out_features, seq_length=1000, output_dim=2)
