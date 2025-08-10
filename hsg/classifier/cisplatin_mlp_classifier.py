@@ -1,4 +1,4 @@
-# mlp_bed_classifier.py
+# mlp_classifier.py
 
 import torch
 import torch.nn as nn
@@ -20,9 +20,35 @@ import random  # For shuffling labels
 SEQUENCE_LENGTH = 100
 INPUT_DIM = SEQUENCE_LENGTH * 4
 BATCH_SIZE = 32
-EPOCHS = 10
+EPOCHS = 3
 LEARNING_RATE = 1e-3
 
+# ---------- Classes ----------
+class SequenceDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        x, y = self.data[idx]
+        return x[0], torch.tensor(y, dtype=torch.float32)
+
+class MLPClassifier(nn.Module):
+    def __init__(self, input_dim):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, 256)
+        self.fc2 = nn.Linear(256, 64)
+        self.fc3 = nn.Linear(64, 1)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = torch.sigmoid(self.fc3(x)).squeeze(1)
+        return x
+
+# ---------- Helper Functions----------
 def one_hot_encode(seq):
     mapping = {'A': [1, 0, 0, 0], 'C': [0, 1, 0, 0], 'G': [0, 0, 1, 0], 'T': [0, 0, 0, 1], 'N': [0, 0, 0, 0]}
     return torch.tensor([mapping.get(base, [0, 0, 0, 0]) for base in seq], dtype=torch.float32)
@@ -68,30 +94,6 @@ def shuffle_labels(data):
     labels = [y for x, y in data]
     random.shuffle(labels)
     return list(zip(sequences, labels))
-
-class SequenceDataset(Dataset):
-    def __init__(self, data):
-        self.data = data
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        x, y = self.data[idx]
-        return x[0], torch.tensor(y, dtype=torch.float32)
-
-class MLPClassifier(nn.Module):
-    def __init__(self, input_dim):
-        super().__init__()
-        self.fc1 = nn.Linear(input_dim, 256)
-        self.fc2 = nn.Linear(256, 64)
-        self.fc3 = nn.Linear(64, 1)
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = torch.sigmoid(self.fc3(x)).squeeze(1)
-        return x
 
 def log_metrics(log_path, roc, cm, report):
     with open(log_path, 'a') as log:
@@ -152,6 +154,7 @@ def save_predictions(output_path, meta, y_true, y_scores):
     pd.DataFrame(flat_rows).to_csv(flat_output_path, index=False)
     print(f"Saved machine-readable predictions to {flat_output_path}")
 
+# ------- Main ---------
 def main():
     parser = argparse.ArgumentParser(description="Train MLP classifier on one-hot encoded genomic sequences")
     parser.add_argument("--log_file", type=str, default="mlp_classification_report.log", help="Output log file for performance metrics")
@@ -183,6 +186,7 @@ def main():
     criterion = nn.BCELoss()
 
     for epoch in range(EPOCHS):
+        # ---- Training ----
         model.train()
         total_loss = 0
         for X, y in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{EPOCHS}", leave=False):
@@ -192,7 +196,17 @@ def main():
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
-        print(f"Epoch {epoch + 1}, Loss: {total_loss:.4f}")
+
+        # ---- Validation ----
+        model.eval()
+        val_loss = 0
+        with torch.no_grad():
+            for X_val, y_val in test_loader:
+                val_output = model(X_val)
+                val_loss += criterion(val_output, y_val).item()
+
+        print(f"Epoch {epoch + 1}, Train Loss: {total_loss:.4f}, Val Loss: {val_loss:.4f}")
+
 
     model.eval()
     y_true, y_scores = [], []
