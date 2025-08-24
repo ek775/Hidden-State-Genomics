@@ -1,0 +1,4 @@
+Category1	Category2	CosineDistance	EuclideanDistance
+True Positive	True Negative	0.3088149474537678	4.7835378008391585
+True Positive	False Positive	0.20877253437671806	3.850813188833885
+True Negative	False Positive	0.2232762989515793	3.9043563748811567
