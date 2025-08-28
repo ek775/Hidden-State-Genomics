@@ -177,4 +177,4 @@ data/msa
 checkpoints/
 
 # ignore the test SQL database
-genome_databases/genbank_data.db
+genome_databases/
