@@ -8,12 +8,14 @@ load_dotenv()
 
 def bed_to_fasta(bedfile: os.PathLike, fastafile:os.PathLike):
     seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
-    sequences = get_sequences_from_dataframe(read_bed_file(bedfile, max_columns=6), seqrepo, pad_size=0)
+    dataframe = read_bed_file(bedfile, max_columns=6)
+    description = [f"{row['chrom']}:{row['chromStart']}-{row['chromEnd']}" for index, row in dataframe.iterrows()]
+    sequences = get_sequences_from_dataframe(dataframe, seqrepo, pad_size=0)
     prefix = os.path.basename(bedfile).split(".")[0]
 
     with open(fastafile, "w") as f:
         for i, seq in enumerate(sequences):
-            seqrecord = SeqRecord.SeqRecord(seq, id=f"{prefix}_{i}")
+            seqrecord = SeqRecord.SeqRecord(seq, id=f"{prefix}_{i}", description=description[i])
             SeqIO.write(seqrecord, f, "fasta")
 
 if __name__ == "__main__":
