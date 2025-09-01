@@ -1,17 +1,17 @@
 import networkx as nx
-from networkx import Graph
+from networkx import MultiGraph
+import numpy as np
+import os, psutil
 
-
-# create 4105 nodes from vocabulary size
+# construct adjacency matrix
 vocab_size = 4105
-G = Graph()
-G.add_nodes_from(range(vocab_size))
+perfect_adjacency = np.full((vocab_size, vocab_size), 10, dtype=np.int32)
+np.fill_diagonal(perfect_adjacency, 0)
+G = nx.from_numpy_array(perfect_adjacency, parallel_edges=True, create_using=MultiGraph)
 
-# create edges between nodes
-for i in range(vocab_size):
-    for j in range(i + 1, vocab_size):
-        G.add_edge(i, j)
-        print(f"Edge count: {G.number_of_edges()}")
-
-print(nx.draw(G))
-print(nx.info(G))
+print(G)
+print("Is the graph connected?", nx.is_connected(G))
+process = psutil.Process(os.getpid())
+rss_bytes = process.memory_info().rss
+rss_mb = rss_bytes / (1024 * 1024)
+print("Memory usage of G:", rss_mb, "MB")
