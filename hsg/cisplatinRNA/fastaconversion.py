@@ -8,10 +8,12 @@ load_dotenv()
 
 def bed_to_fasta(bedfile: os.PathLike, fastafile:os.PathLike):
     seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
-    dataframe = read_bed_file(bedfile, max_columns=6)
-    description = [f"{row['chrom']}:{row['chromStart']}-{row['chromEnd']}" for index, row in dataframe.iterrows()]
-    sequences = get_sequences_from_dataframe(dataframe, seqrepo, pad_size=0)
+    sequences, dataframe = get_sequences_from_dataframe(read_bed_file(bedfile, max_columns=6), seqrepo, pad_size=0, return_df=True)
+    print(dataframe.head())
+    description = [f"{row['chrom']}:{row['chromStart']}-{row['chromEnd']}({row['strand']})" for index, row in dataframe.iterrows()]
     prefix = os.path.basename(bedfile).split(".")[0]
+
+    print("Saving FASTA file...")
 
     with open(fastafile, "w") as f:
         for i, seq in enumerate(sequences):
