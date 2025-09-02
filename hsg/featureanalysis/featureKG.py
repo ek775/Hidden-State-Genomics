@@ -72,16 +72,28 @@ def main(input: str, output: str, exp_factor: int = 8, layer_idx: int = 23, sae_
     print("----------- <model> -----------")
 
     # load data
-    seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
-    sequences, dataframe = get_sequences_from_dataframe(
-        read_bed_file(input, max_columns=6,), # limit=100), # set limit for debugging 
-        pad_size=0, 
-        seqrepo=seqrepo, 
-        return_df=True,
-    )
+    if input.endswith(".bed"):
+        seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
+        sequences, dataframe = get_sequences_from_dataframe(
+            read_bed_file(input, max_columns=6,), # limit=100), # set limit for debugging 
+            pad_size=0, 
+            seqrepo=seqrepo, 
+            return_df=True,
+        )
 
-    descriptions = [f"{row['chrom']}:{row['chromStart']}-{row['chromEnd']}({row['strand']})" for index, row in dataframe.iterrows()]
-    del dataframe
+        descriptions = [f"{row['chrom']}:{row['chromStart']}-{row['chromEnd']}({row['strand']})" for index, row in dataframe.iterrows()]
+        del dataframe
+
+    elif input.endswith((".fasta", ".fa")):
+        from Bio import SeqIO
+        from Bio.SeqRecord import SeqRecord
+        records: list[SeqRecord] = list(SeqIO.parse(input, "fasta"))
+        sequences = [str(record.seq) for record in records]
+        descriptions = [record.id for record in records]
+
+    else:
+        raise ValueError("Unsupported file format")
+
     print("----------- <data> -----------")
 
     # extract features and tokens
