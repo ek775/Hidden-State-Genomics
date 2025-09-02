@@ -1,0 +1,12 @@
+External Tools:
+- SeqRepo (GRCh38 sequence database)
+- Mafft (Multiple Sequence Alignment)
+
+SeqRepo (From Biocommons.SeqRepo) Version: 
+2024-12-20
+(see pyproject.toml for python version info)
+
+MAFFT:
+  MAFFT v7.526 (2024/Apr/26)
+  https://mafft.cbrc.jp/alignment/software/
+  MBE 30:772-780 (2013), NAR 30:3059-3066 (2002)

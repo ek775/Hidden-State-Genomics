@@ -16,7 +16,7 @@ import pandas as pd
 
 from dotenv import load_dotenv
 from tqdm import tqdm
-import os
+import os, math
 
 load_dotenv()
 
@@ -52,13 +52,29 @@ def prepare_data(cisplatin_positive, cisplatin_negative) -> tuple[list, list, li
 
 
 
+def process_input(seqs, condition, prediction_head, upstream_model, device, vectorizer=None):
+            if condition == "features":
+                seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s), 1000) for s in seqs]).to(device)
+            elif condition == "raw_tokens":
+                stack = [upstream_model.tokenizer.encode_plus(s, padding="max_length", truncation=True, return_tensors="pt", max_length=1000)["input_ids"] for s in seqs]
+                stack = vectorizer.vectorize_tokens([s.squeeze() for s in stack])
+                seq_tensor = torch.stack(stack).float().to(device)
+            else:  # condition == "embeddings"
+                seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s, return_hidden_states=True)[1], 1000) for s in seqs]).to(device)
+            
+            return seq_tensor
+
+
+
+
+
 def train(upstream_model, prediction_head, train, validate, condition:str, 
-          layer_idx, early_stop_patience=10, epochs=100, batch_size=32, learning_rate=0.001, output_dir:str=None):
+          layer_idx, early_stop_patience=10, epochs=100, batch_size=32, learning_rate=0.001, output_dir:str=None, vectorizer=None):
     """
     Train a CNN model for RNA sequence classification.
     """
-    if condition not in ["embeddings", "features"]:
-        raise ValueError("Condition must be either 'embeddings' or 'features'.")
+    if condition not in ["embeddings", "features", "raw_tokens"]:
+        raise ValueError("Condition must be either 'embeddings', 'features', or 'raw_tokens'.")
 
     print(f"Training {condition} model for layer {layer_idx}...")
     # for early stopping
@@ -110,11 +126,7 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
             seq_labels = [s[1] for s in sample]
 
             # get sequence tensor from upstream model, pad to max length
-            if condition == "features":
-                seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s), 1000) for s in seqs]).to(device)
-            else:  # condition == "embeddings"
-                seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s, return_hidden_states=True)[1], 1000) for s in seqs]).to(device)
-
+            seq_tensor = process_input(seqs, condition, prediction_head, upstream_model, device, vectorizer=vectorizer)
             label_tensor = torch.stack([torch.as_tensor(l, dtype=torch.float) for l in seq_labels]).to(device)
 
             prediction_head.train()
@@ -151,11 +163,7 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
                 seqs = [s[0] for s in sample]
                 seq_labels = [s[1] for s in sample]
 
-                if condition == "features":
-                    seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s), 1000) for s in seqs]).to(device)
-                else:  # condition == "embeddings"
-                    seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s, return_hidden_states=True)[1], 1000) for s in seqs]).to(device)
-
+                seq_tensor = process_input(seqs, condition, prediction_head, upstream_model, device, vectorizer=vectorizer)
                 label_tensor = torch.stack([torch.as_tensor(l, dtype=torch.float) for l in seq_labels]).to(device)
 
                 output = prediction_head(seq_tensor)
@@ -177,7 +185,7 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
             print(f"Validation Loss: {avg_val_loss:.4f} | Validation Accuracy: {avg_val_accuracy:.4f}")
         
         # checkpoint logic
-        tracker.update(prediction_head, avg_train_accuracy, avg_val_accuracy, epoch)
+        tracker.update(prediction_head, avg_train_loss, avg_val_loss, epoch)
         if tracker.early_stop:
             print(f"Early stopping at epoch {epoch}.")
             break
@@ -220,7 +228,7 @@ def train(upstream_model, prediction_head, train, validate, condition:str,
 
 
 
-def evaluate(upstream_model, prediction_head, test_data, condition:str, batch_size:int, output_dir:str=None):
+def evaluate(upstream_model, prediction_head, test_data, condition:str, batch_size:int, output_dir:str=None, vectorizer=None):
     print("Evaluating model...")
     with torch.no_grad():
         prediction_head.eval()
@@ -234,11 +242,7 @@ def evaluate(upstream_model, prediction_head, test_data, condition:str, batch_si
             seqs = [s[0] for s in sample]
             seq_labels = [s[1] for s in sample]
             # get sequence tensor from upstream model, pad to max length
-            if condition == "features":
-                seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s), 1000) for s in seqs]).to(device)
-            else:  # condition == "embeddings"
-                seq_tensor = torch.stack([prediction_head.pad_sequence(upstream_model(s, return_hidden_states=True)[1], 1000) for s in seqs]).to(device)
-
+            seq_tensor = process_input(seqs, condition, prediction_head, upstream_model, device, vectorizer=vectorizer)
             label_tensor = torch.stack([torch.as_tensor(l, dtype=torch.float) for l in seq_labels]).to(device)
 
             output = prediction_head(seq_tensor)
@@ -311,7 +315,7 @@ def evaluate(upstream_model, prediction_head, test_data, condition:str, batch_si
 ### Compose everything into a main function
 
 def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, early_stop_patience=10, 
-         epochs=100, batch_size=32, learning_rate=0.001, sae_dir=None, output_path=None):
+         epochs=100, batch_size=32, learning_rate=0.001, sae_dir=None, output_path=None, condition="all"):
     """
     Conduct training and evaluation of a CNN model for RNA sequence classification.
     """
@@ -328,44 +332,72 @@ def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, ear
     train_data, validation_data, test_data = prepare_data(cisplatin_positive, cisplatin_negative)
     # Initialize NTv2 model + SAE
     upstream_model = get_latent_model(os.environ["NT_MODEL"], layer_idx, sae_path=sae_path)
+    # Freeze the upstream model weights
+    for param in upstream_model.parameters():
+        param.requires_grad = False
 
     # Train embedding model
-    embedding_head = CNNHead(input_dim=upstream_model.parent_model.esm.encoder.layer[layer_idx].output.dense.out_features, seq_length=1000, output_dim=2)
-    embedding_head = train(
-        upstream_model, 
-        embedding_head, 
-        train_data, 
-        validation_data, 
-        condition="embeddings", 
-        layer_idx=layer_idx,
-        early_stop_patience=early_stop_patience,
-        epochs=epochs, 
-        batch_size=batch_size, 
-        learning_rate=learning_rate, 
-        output_dir=output_path
-    )
+    if condition in ["embeddings", "all"]:
+        embedding_head = CNNHead(input_dim=upstream_model.parent_model.esm.encoder.layer[layer_idx].output.dense.out_features, seq_length=1000, output_dim=2)
+        embedding_head = train(
+            upstream_model, 
+            embedding_head, 
+            train_data, 
+            validation_data, 
+            condition="embeddings", 
+            layer_idx=layer_idx,
+            early_stop_patience=early_stop_patience,
+            epochs=epochs, 
+            batch_size=batch_size, 
+            learning_rate=learning_rate, 
+            output_dir=output_path
+        )
 
-    evaluate(upstream_model=upstream_model, prediction_head=embedding_head, test_data=test_data, condition="embeddings", 
-             batch_size=batch_size, output_dir=output_path)
+        evaluate(upstream_model=upstream_model, prediction_head=embedding_head, test_data=test_data, condition="embeddings", 
+                batch_size=batch_size, output_dir=output_path)
 
     # Train feature model
-    feature_head = CNNHead(input_dim=upstream_model.sae.dict_size, seq_length=1000, output_dim=2)
-    feature_head = train(
-        upstream_model, 
-        feature_head, 
-        train_data, 
-        validation_data, 
-        condition="features", 
-        layer_idx=layer_idx,
-        early_stop_patience=early_stop_patience,
-        epochs=epochs, 
-        batch_size=batch_size, 
-        learning_rate=learning_rate, 
-        output_dir=output_path
-    )
+    if condition in ["features", "all"]:
+        feature_head = CNNHead(input_dim=upstream_model.sae.dict_size, seq_length=1000, output_dim=2)
+        feature_head = train(
+            upstream_model, 
+            feature_head, 
+            train_data, 
+            validation_data, 
+            condition="features", 
+            layer_idx=layer_idx,
+            early_stop_patience=early_stop_patience,
+            epochs=epochs, 
+            batch_size=batch_size, 
+            learning_rate=learning_rate, 
+            output_dir=output_path
+        )
 
-    evaluate(upstream_model=upstream_model, prediction_head=feature_head, test_data=test_data, condition="features", 
-             batch_size=batch_size, output_dir=output_path)
+        evaluate(upstream_model=upstream_model, prediction_head=feature_head, test_data=test_data, condition="features", 
+                batch_size=batch_size, output_dir=output_path)
+
+    # Train raw_tokens model
+    if condition in ["raw_tokens", "all"]:
+        from hsg.cisplatinRNA.vectorizer import Vectorizer
+        vectorizer = Vectorizer()
+        raw_tokens_head = CNNHead(input_dim=upstream_model.sae.dict_size, seq_length=1000, output_dim=2)
+        raw_tokens_head = train(
+            upstream_model, 
+            raw_tokens_head, 
+            train_data, 
+            validation_data, 
+            condition="raw_tokens", 
+            layer_idx=layer_idx,
+            early_stop_patience=early_stop_patience,
+            epochs=epochs, 
+            batch_size=batch_size, 
+            learning_rate=learning_rate, 
+            output_dir=output_path,
+            vectorizer=vectorizer,
+        )
+
+        evaluate(upstream_model=upstream_model, prediction_head=raw_tokens_head, test_data=test_data, condition="raw_tokens", 
+                batch_size=batch_size, output_dir=output_path, vectorizer=vectorizer)
 
 
 
@@ -386,6 +418,7 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate for the optimizer.")
     parser.add_argument("--sae_dir", type=str, default=None, help="Directory containing SAE models.")
     parser.add_argument("--output_path", type=str, default=None, help="Output path for saving results.")
+    parser.add_argument("--condition", type=str, default="all", help="Condition to train: 'embeddings', 'features', 'raw_tokens', or 'all'.")
 
     args = parser.parse_args()
 
@@ -399,5 +432,6 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         sae_dir=args.sae_dir,
-        output_path=args.output_path
+        output_path=args.output_path,
+        condition=args.condition
     )

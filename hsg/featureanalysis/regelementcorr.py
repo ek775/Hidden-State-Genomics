@@ -96,7 +96,7 @@ def read_bed_file(bed_file: str, max_columns: int = 12, limit: int = None) -> pd
         return df
 
 
-def get_sequences_from_dataframe(df: pd.DataFrame, seqrepo: SeqRepo, pad_size: int) -> list[str]:
+def get_sequences_from_dataframe(df: pd.DataFrame, seqrepo: SeqRepo, pad_size: int, return_df: bool = False) -> list[str]:
     """
     Get sequences from a DataFrame using SeqRepo.
     
@@ -108,6 +108,7 @@ def get_sequences_from_dataframe(df: pd.DataFrame, seqrepo: SeqRepo, pad_size: i
         list: List of sequences.
     """
     sequences = []
+    metadata = []
 
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Fetching sequences"):
 
@@ -133,7 +134,13 @@ def get_sequences_from_dataframe(df: pd.DataFrame, seqrepo: SeqRepo, pad_size: i
             print(f"Unknown strand for {chrom}:{start}-{end}: {row['strand']}")
             continue
 
-    return sequences
+        if return_df:
+            metadata.append(row)
+
+    if return_df:
+        return sequences, pd.concat(metadata, axis=1, ignore_index=False).T.reset_index(drop=True)
+    else:
+        return sequences
 
 
 def generate_annotation_vectors(seq_list: list[str], pad_size: int) -> list[np.array]:
