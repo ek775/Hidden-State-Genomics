@@ -8,3 +8,6 @@ Track: RefSeq Func Elems
 Table: refSeqFuncElems
 Region: Genome
 
+###############################################
+Annotations from similar:
+https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/

@@ -38,8 +38,9 @@ CLIN_GEN_CSV="~/Hidden-State-Genomics/data/erepo.tabbed.txt"
 CLIN_VAR_CSV="~/Hidden-State-Genomics/data/variant_summary.txt"
 NT_MODEL="InstaDeepAI/nucleotide-transformer-500m-human-ref"
 GCLOUD_BUCKET="gs://hidden-state-genomics"
-SEQREPO_PATH="./data/2024-05-23"
+SEQREPO_PATH="./data/2024-12-20"
 REFSEQ_CACHE="./data/refseq_cache.txt"
+REFSEQ_GTF="data/Annotation Data/hg38.ncbiRefSeq.gtf"
 ```
 
 - Run unit tests to ensure everything is running smooth

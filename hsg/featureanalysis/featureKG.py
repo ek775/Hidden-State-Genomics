@@ -5,19 +5,20 @@ import networkx as nx
 import numpy as np
 import torch
 from biocommons.seqrepo import SeqRepo
+import gffutils
 from tqdm import tqdm
 from networkx.readwrite import json_graph
 
-import os, json
+import os, json, re
 
 from dotenv import load_dotenv
 load_dotenv()
 
 ### helper functions ###
-def extract_features_and_tokens(sequences: list[str], descriptions: list[str], model) -> tuple[dict, dict]:
+def extract_features_and_tokens(sequences: list[str], descriptions: list[str], model) -> dict[dict]:
 
     seq_features = {}
-    seq_tokens = {}
+#    seq_tokens = {}
 
     for i, seq in enumerate(tqdm(sequences, desc="Extracting features")):
         with torch.no_grad():
@@ -30,24 +31,11 @@ def extract_features_and_tokens(sequences: list[str], descriptions: list[str], m
 
         # aggregate sequence-level features
         if seq_features.get(descriptions[i]) is None:
-            seq_features[descriptions[i]] = [int(feat) for feat in set(best_feats)]
+            seq_features[descriptions[i]] = {k:v for k, v in token_feats}
         else:
-            seq_features[descriptions[i]].extend([int(feat) for feat in set(best_feats)])
-            seq_features[descriptions[i]] = list(set(seq_features[descriptions[i]]))
+            seq_features[descriptions[i]] = {k:v for k, v in token_feats if k not in seq_features[descriptions[i]]}
 
-        # aggregate token-level features
-        for token, feat in token_feats:
-            if seq_tokens.get(token):
-                seq_tokens[token].append(int(feat))
-            else:
-                seq_tokens[token] = [int(feat)]
-
-    # reduce token feature ids to uniques
-    for token, feats in seq_tokens.items():
-        seq_tokens[token] = list(set(feats))
-
-    return seq_features, seq_tokens
-
+    return seq_features
 
 ### main ###
 def main(input: str, output: str, exp_factor: int = 8, layer_idx: int = 23, sae_dir: str = None):
@@ -93,21 +81,65 @@ def main(input: str, output: str, exp_factor: int = 8, layer_idx: int = 23, sae_
 
     else:
         raise ValueError("Unsupported file format")
+    
+    # initialize database with gffutils for gene annotation data
+    annotdb_path = '.'.join(os.environ["REFSEQ_GTF"].split('.')[:-1]) + '.db'
+
+    if not os.path.exists(annotdb_path):
+        print("Creating annotation database...")
+        annotdb = gffutils.create_db(os.environ["REFSEQ_GTF"], 
+                                        dbfn='.'.join(os.environ["REFSEQ_GTF"].split('.')[:-1]) + '.db', 
+                                        verbose=True, 
+                                        keep_order=True, 
+                                        merge_strategy='merge', 
+                                        sort_attribute_values=True)
+    
+    # connect
+    print("Connecting to annotation database...")
+    annotdb = gffutils.FeatureDB(annotdb_path, keep_order=True)
+    print("DONE")
 
     print("----------- <data> -----------")
 
     # extract features and tokens
-    seq_feats, token_feats = extract_features_and_tokens(sequences, descriptions, model)
+    seq_token_feats = extract_features_and_tokens(sequences, descriptions, model)
 
-    # construct a networkx graph with sequences, features, and tokens as KG nodes connected by co-occurrences
-    G = nx.Graph()
+    # construct a networkx graph with sequences connected to tokens by feature typed edges
+    G = nx.MultiDiGraph()
 
-    for seq, feats in tqdm(seq_feats.items(), desc="Adding sequence edges"):
-        G.add_edges_from([(seq, feat) for feat in feats])
+    for sequence in tqdm(seq_token_feats, desc="Building knowledge graph"):
+        for token, feat in seq_token_feats[sequence].items():
 
-    for token, feats in tqdm(token_feats.items(), desc="Adding token edges"):
-        G.add_edges_from([(token, feat) for feat in feats])
+            # var sequence is in this case the hg38 coordinate description
+            match = re.match(r"(?P<chrom>[^:]+):(?P<start>\d+)-(?P<end>\d+)\((?P<strand>[+-])\)", sequence)
+            if match:
+                chrom = match.group("chrom")
+                start = int(match.group("start"))
+                end = int(match.group("end"))
+                strand = match.group("strand")
+            else:
+                raise ValueError(f"Invalid sequence format: {sequence}")
+            
+            # search for gene features in ncbi refseq annotation
+            feature_types = ['gene', 'transcript', 'exon', 'CDS', 'start_codon', 'stop_codon', '3UTR', '5UTR']
+            annotations = annotdb.region(region=(chrom, start, end), strand=strand, featuretype=feature_types)
 
+            seqmetadata = {}
+            for ann in annotations:
+                attr = {k: v[0] for k, v in ann.attributes.items()}
+                attr['featuretype'] = ann.featuretype
+                attr['strand'] = ann.strand
+                attr['start'] = ann.start
+                attr['end'] = ann.end
+                
+                id = attr.get(f"{ann.featuretype}_id", f"{ann.id}:{ann.start}-{ann.end}")
+                seqmetadata[id] = attr
+
+            # add nodes and edges
+            # tokens point to features bc tokens activate features
+            G.add_edge(token, feat, sequence=sequence, **seqmetadata)
+
+    # show graph info
     print(G)
 
     # save the knowledge graph as a json file
@@ -116,7 +148,10 @@ def main(input: str, output: str, exp_factor: int = 8, layer_idx: int = 23, sae_
 
     # visualize the knowledge graph
     import matplotlib.pyplot as plt
-    nx.draw(G, pos=nx.spring_layout(G), with_labels=True)
+    def node_color(x):
+        return "lightblue" if type(x) == str else "red"
+    colors = [node_color(x) for x in G.nodes]
+    nx.draw(G, pos=nx.spring_layout(G, k=1/(len(G.nodes)**1e-100_000)), with_labels=True, node_color=colors)
     plt.show()
 
 
