@@ -37,6 +37,7 @@ dependencies = [
     "datashader",
     "bokeh",
     "holoviews",
+    "gffutils",
 ]
 
 [build-system]

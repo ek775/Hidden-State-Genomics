@@ -2,6 +2,10 @@
 ![100seqfeatureKG](100seqfeatureKG.png)
 Advances in Mechanistic Interpretability have made it possible to decompose neural network activations into interpretable features via sparse auto-encoders. These features represent concepts that are learned by the model, and can be used to understand how a neural network makes its predictions. Early mechanistic interpretability studies on protein language models have led to speculation that studying the internals of these models may reveal novel biology, however, investigating this theory poses a difficult technical challenge. We attempt to answer this question by constructing and exploring knowledge-graph relationships between features extracted from genomic language model embeddings and predicted RNA structures for novel cisplatin-RNA complexes. 
 
+The repository is generally organized with input and output `data` from various command line tools in the data folder, and our code under the `hsg` folder. Most of the scripts are intended to be run as command line tools from the root directory (i.e. `python -m hsg.some_folder.some_script --options arguments`). 
+
+Although we mainly rely on open-source datasets for this project, some of the data we used in this analysis, and many of the models we trained, are too large for storage in a github repository. In addition, for some elements of our analysis, we rely on other external bioinformatics tools such as MAFFT for large-scale multiple sequence alignment. Documentation on data, processing tools, and data sourcing can be found in the data folder of this repository. If you have further questions, or would like access to the models we trained, feel free to reach out to us using the contact information in `pyproject.toml`.
+
 ***Setup Instructions***
 - Clone the repository
 
@@ -38,8 +42,9 @@ CLIN_GEN_CSV="~/Hidden-State-Genomics/data/erepo.tabbed.txt"
 CLIN_VAR_CSV="~/Hidden-State-Genomics/data/variant_summary.txt"
 NT_MODEL="InstaDeepAI/nucleotide-transformer-500m-human-ref"
 GCLOUD_BUCKET="gs://hidden-state-genomics"
-SEQREPO_PATH="./data/2024-05-23"
+SEQREPO_PATH="./data/2024-12-20"
 REFSEQ_CACHE="./data/refseq_cache.txt"
+REFSEQ_GTF="data/Annotation Data/hg38.ncbiRefSeq.gtf"
 ```
 
 - Run unit tests to ensure everything is running smooth

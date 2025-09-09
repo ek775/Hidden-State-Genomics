@@ -17,7 +17,7 @@ def bed_to_fasta(bedfile: os.PathLike, fastafile:os.PathLike):
 
     with open(fastafile, "w") as f:
         for i, seq in enumerate(sequences):
-            seqrecord = SeqRecord.SeqRecord(seq, id=f"{prefix}_{i}", description=description[i])
+            seqrecord = SeqRecord.SeqRecord(seq, id=description[i])
             SeqIO.write(seqrecord, f, "fasta")
 
 if __name__ == "__main__":

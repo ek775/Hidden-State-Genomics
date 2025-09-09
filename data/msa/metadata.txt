@@ -1,0 +1,29 @@
+Each of the MSAs in this folder was carried out using MAFFT: 
+```
+  MAFFT v7.526 (2024/Apr/26)
+  https://mafft.cbrc.jp/alignment/software/
+  MBE 30:772-780 (2013), NAR 30:3059-3066 (2002)
+```
+
+Consensus sequences were obtained by % identity via Jalview:
+```
+Version = 2.11.5.0 (26/08/2025)
+
+Waterhouse, A.M., Procter, J.B., Martin, D.M.A, Clamp, M., Barton, G.J (2009), "Jalview version 2: A Multiple Sequence Alignment and Analysis Workbench," Bioinformatics 25 (9) 1189-1191 doi: 10.1093/bioinformatics/btp033
+```
+
+Multiple Sequence Alignments were performed over 3 principle datasets: 
+
+*Cisplatin Binding Sequences (cisplatin_pos)*
+ - The full set of sequences identified by Nair and colleagues as binding cisplatin
+ - Approximately 44k sequences from triplicate ChIP-seq assays, mapped to hg38 with loci identified by peak calling
+ - MAFFT defaults were used at baseline, then increased and decreased gappenalties were applied (high=2.53, default=1.53, low=0.53)
+
+*AlphaFold3 DNA Input Sequence Subset (af3_dnapos)*
+ - A randomized subset of the full Cisplatin Binding Sequence set ~256 sequences
+ - These sequences were originally transcribed to be fed as input to AlphaFold3 to obtain predicted RNA-Cisplatin complexes, however, the results were found to be unreliable upon post-generation analysis. Structures frequently contained broken phosphate backbones or exhibited implausible torsion angles.
+ - MAFFT defaults were used
+
+*AlphaFold3 RNA Input Sequence Subset (af3_rnapos)*
+ - Transcribed RNA sequences from the DNA subset above
+ - MAFFT defaults were used

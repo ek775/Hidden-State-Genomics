@@ -8,3 +8,9 @@ Track: RefSeq Func Elems
 Table: refSeqFuncElems
 Region: Genome
 
+###############################################
+Gene Annotations also sourced from UCSC Genome Browser:
+https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/
+
+The re-compressed hg38 gtf file with NCBI RefSeq Gene Annotations from the UCSC Genome Browser is located in this folder.
+gffutils is used to parse this file into a database for adding gene data to the knowledge graphs.
