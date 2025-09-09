@@ -171,7 +171,9 @@ data/variant_summary.txt
 data/clingen_w_seqs.csv
 # ignore Nair et al. datasets
 data/A2780_Cisplatin_Binding
-data/msa
+
+# uncompressed msa files are too large
+data/msa/*fa
 # annotation gtf files mostly too large
 *.gtf
 data/Annotation Data/hg38.ncbiRefSeq.db

@@ -1,0 +1,13 @@
+Each of the MSAs in this folder was carried out using MAFFT: 
+```
+  MAFFT v7.526 (2024/Apr/26)
+  https://mafft.cbrc.jp/alignment/software/
+  MBE 30:772-780 (2013), NAR 30:3059-3066 (2002)
+```
+
+Consensus sequences were obtained by % identity via Jalview:
+```
+Version = 2.11.5.0 (26/08/2025)
+
+Waterhouse, A.M., Procter, J.B., Martin, D.M.A, Clamp, M., Barton, G.J (2009), "Jalview version 2: A Multiple Sequence Alignment and Analysis Workbench," Bioinformatics 25 (9) 1189-1191 doi: 10.1093/bioinformatics/btp033
+```
