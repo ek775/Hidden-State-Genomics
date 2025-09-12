@@ -122,7 +122,7 @@ def main(input: str, output: str, exp_factor: int = 8, layer_idx: int = 23, sae_
             
             # search for gene features in ncbi refseq annotation
             feature_types = ['gene', 'transcript', 'exon', 'CDS', 'start_codon', 'stop_codon', '3UTR', '5UTR']
-            annotations = annotdb.region(region=(chrom, start, end), strand=strand, featuretype=feature_types)
+            annotations = annotdb.region(region=(chrom, start, end), strand=strand, featuretype=feature_types, completely_within=True)
 
             seqmetadata = {}
             for ann in annotations:
@@ -137,7 +137,7 @@ def main(input: str, output: str, exp_factor: int = 8, layer_idx: int = 23, sae_
 
             # add nodes and edges
             # tokens point to features bc tokens activate features
-            G.add_edge(token, feat, sequence=sequence, **seqmetadata)
+            G.add_edge(token, feat, sequence=sequence, chrom=chrom, start=start, end=end, strand=strand, annotations=seqmetadata)
 
     # show graph info
     print(G)
