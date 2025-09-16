@@ -10,11 +10,11 @@ Advances in Mechanistic Interpretability have made it possible to decompose neur
 
 ![100seqfeatureKG](100seqfeatureKG.png)
 
-### Multi-Edge SAE Knowledge Graph
+### Multi-Edge SAE Knowledge Graphs
 
-*Alternate Multi-Layer SAE knowledge graph on a random selection of cisplatin binding transcripts. Red nodes indicate a feature, blue nodes indicate a token, and nodes are connected based on the presence of a token causing feature activation. Edge metadata contains Gene and Intronic/Exonic annotations from NCBI RefSeq reference annotations.*
+*Alternate Multi-Layer SAE knowledge graph on a random selection of cisplatin binding motifs (left) and coding cisplatin binding transcripts (right). Red nodes indicate a feature, blue nodes indicate a token, and nodes are connected based on the presence of a token causing feature activation. Edge metadata contains Gene and Intronic/Exonic annotations from NCBI RefSeq reference annotations.*
 
-![alt text](selected_cisplatinbinding_seqs.png)
+![alt text](selected_cisplatinbinding_seqs.png) ![alt text](coding_cisplatin_binding_regions.png)
 
 ## Notes
 
