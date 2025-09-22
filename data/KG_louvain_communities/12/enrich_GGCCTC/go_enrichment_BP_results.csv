@@ -1,0 +1,3 @@
+"ID","Description","GeneRatio","BgRatio","RichFactor","FoldEnrichment","zScore","pvalue","p.adjust","qvalue","geneID","Count"
+"GO:0045091","regulation of single stranded viral RNA replication via double stranded DNA intermediate","2/12","14/18805",0.142857142857143,223.869047619048,21.0793160861477,3.38254586765886e-05,0.00587183849114207,0.00379888134590412,"TOP2B/APOBEC3C",2
+"GO:0039692","single stranded viral RNA replication via double stranded DNA intermediate","2/12","15/18805",0.133333333333333,208.944444444444,20.3585690295891,3.90155381471234e-05,0.00587183849114207,0.00379888134590412,"TOP2B/APOBEC3C",2
