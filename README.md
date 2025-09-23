@@ -4,17 +4,22 @@
 
 Advances in Mechanistic Interpretability have made it possible to decompose neural network activations into interpretable features via sparse auto-encoders. These features represent concepts that are learned by the model, and can be used to understand how a neural network makes its predictions. Early mechanistic interpretability studies on protein language models have led to speculation that studying the internals of these models may reveal novel biology, however, investigating this theory poses a difficult technical challenge. We attempt to answer this question by constructing and exploring knowledge-graph relationships between features extracted from genomic language model embeddings and predicted RNA structures for novel cisplatin-RNA complexes. 
 
-### Simple SAE Knowledge Graph
+**Contents**
+- [Example Graph Analysis](#multi-edge-sae-knowledge-graphs)
+- [Notes](#notes)
+- [Setup/Installation](#setup-instructions)
 
-*SAE knowledge graph generated from a random selection of cisplatin binding transcripts. Each node represents a token, feature number, or a sequence descriptor and is connected based on feature activation.*
+### Multi-Edge SAE Knowledge Graphs
 
-![100seqfeatureKG](100seqfeatureKG.png)
+*Multi-Layer Directed SAE knowledge graph on a random selection of cisplatin binding motifs. The basic knowledge graph is constructed from per-token strongest feature activations with associations drawn according to the triplet (subject, object, predicate) where (token, feature, sequenceID) includes metadata containing NCBI refseq annotations as found in the UCSC genome broswer. Red nodes indicate a feature, blue nodes indicate a token, and nodes are connected based on the presence of a token causing feature activation. Edge metadata is used for gene set enrichment analysis.*
 
-### Multi-Edge SAE Knowledge Graph
+![Figure 2](selected_cisplatinbinding_seqs.png) 
 
-*Alternate Multi-Layer SAE knowledge graph on a random selection of cisplatin binding transcripts. Red nodes indicate a feature, blue nodes indicate a token, and nodes are connected based on the presence of a token causing feature activation. Edge metadata contains Gene and Intronic/Exonic annotations from NCBI RefSeq reference annotations.*
+### Gene Set Enrichment Analysis of SAE Features (Feature 3378)
 
-![alt text](selected_cisplatinbinding_seqs.png)
+*High-centrality feature-derived gene set enrichment for SAE feature 3378 (layer 23, ef8), derived from PageRank centrality score in a knowledge graph generated from putative cisplatin-binding transcripts in the human genome. In the enriched gene set graph for feature 3378, we can see enriched GO term DAG structure and general biological processes identifiable from DNA sequences alone using genomic language model features extracted via SAE.*
+
+![Figure 3](data/feat_3378/enrichr_GO_BPnet.png)
 
 ## Notes
 
