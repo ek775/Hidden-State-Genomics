@@ -1,0 +1,2 @@
+"ID","Description","GeneRatio","BgRatio","RichFactor","FoldEnrichment","zScore","pvalue","p.adjust","qvalue","geneID","Count"
+"GO:0001825","blastocyst formation","6/162","45/18805",0.133333333333333,15.477366255144,9.06367094449377,2.29802558164212e-06,0.00563935477734977,0.00522982242895818,"MATR3/TEAD4/MFN2/RRP7A/ADA/RPL7L1",6

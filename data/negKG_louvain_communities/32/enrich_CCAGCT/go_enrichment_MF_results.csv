@@ -1,0 +1,2 @@
+"ID","Description","GeneRatio","BgRatio","RichFactor","FoldEnrichment","zScore","pvalue","p.adjust","qvalue","geneID","Count"
+"GO:0140852","histone ubiquitin ligase activity","4/228","13/18639",0.307692307692308,25.1538461538462,9.69452557770374,1.42985947217951e-05,0.00813590039670142,0.00749547386468839,"HUWE1/UHRF1/TRIM37/BRCA1",4

@@ -1,0 +1,2 @@
+"ID","Description","GeneRatio","BgRatio","RichFactor","FoldEnrichment","zScore","pvalue","p.adjust","qvalue","geneID","Count"
+"GO:0003735","structural constituent of ribosome","12/137","175/18639",0.0685714285714286,9.32921793534932,9.52600824770439,6.4586144324793e-09,2.5899043874242e-06,2.29790702966106e-06,"RPL38/RPS14/RPS9/RPL13A/MRPL24/RPS3/RPS12/RPS27/RPS18/RPS11/RPS3A/RPL28",12

@@ -1,0 +1,2 @@
+"ID","Description","GeneRatio","BgRatio","RichFactor","FoldEnrichment","zScore","pvalue","p.adjust","qvalue","geneID","Count"
+"GO:0045727","positive regulation of translation","11/251","140/18805",0.0785714285714286,5.88659647125783,6.74993675470776,2.8667870084842e-06,0.00911924947398824,0.00805416265857298,"MTOR/PKM/MIR15B/LARP1/ABCF1/EIF4G2/PRKDC/USP16/METTL14/EIF4A3/EIF2AK4",11

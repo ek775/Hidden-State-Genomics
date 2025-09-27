@@ -1,0 +1,2 @@
+"ID","Description","GeneRatio","BgRatio","RichFactor","FoldEnrichment","zScore","pvalue","p.adjust","qvalue","geneID","Count"
+"GO:0046966","nuclear thyroid hormone receptor binding","5/222","28/18639",0.178571428571429,14.9927606177606,8.13512559925185,1.80094749281204e-05,0.00992322068539433,0.0092132682263858,"TRIP12/GTF2B/NSD1/MED1/PRMT2",5
