@@ -175,6 +175,9 @@ data/cisplatin_pos_kg_cyto.json
 data/cisplatin_pos_kg.json
 data/cisplatin_neg45k_kg.json
 data/cisplatin_neg45k_kg_cyto.json
+data/negKG_louvain_communities/1/graph.json
+data/negKG_louvain_communities/15/graph.json
+data/negKG_louvain_communities/2/graph.json
 
 # uncompressed msa files are too large
 data/msa/*fa
