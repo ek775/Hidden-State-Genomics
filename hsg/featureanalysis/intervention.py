@@ -16,7 +16,7 @@ load_dotenv()
 
 
 
-def test(feature: int, intervention_value: int, sequences: list[str, torch.Tensor], cnn, sae) -> tuple[torch.Tensor, torch.Tensor]:
+def test(feature: int, intervention_value: int, sequences: list[str, torch.Tensor], cnn, sae, control: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Test the effect of intervening on a specific feature in the latent space.
 
@@ -26,6 +26,7 @@ def test(feature: int, intervention_value: int, sequences: list[str, torch.Tenso
         sequences (list[str, torch.Tensor]): List of tuples containing sequence strings and their corresponding tensors.
         cnn (CNNHead): The pre-trained CNN model for feature extraction.
         sae (torch.nn.Module): The pre-trained SAE model for latent representation.
+        control (bool): Whether to run the control test without intervention.
 
     Returns:
         predictions (torch.Tensor): The model class prediction probabilities after intervention.
@@ -38,7 +39,10 @@ def test(feature: int, intervention_value: int, sequences: list[str, torch.Tenso
             latent = torch.squeeze(sae.forward(seq))
             intervention_vec = torch.zeros_like(latent)
             intervention_vec[:, feature] = intervention_value
-            modified_latent = latent + intervention_vec
+            if control:
+                modified_latent = latent
+            else:
+                modified_latent = intervention_vec.T.matmul(latent) # amplify feature signal and suppress others
             output = cnn.forward(cnn.pad_sequence(modified_latent, max_length=cnn.seq_length).unsqueeze(0))
             results.append(output.squeeze(0))
             labels.append(torch.Tensor(label))
@@ -173,15 +177,15 @@ def main(feature: int, intervention_value: int, cnn_path: str, sae_path: str, ci
     sae_model = get_latent_model(parent_model_path=os.environ["NT_MODEL"], layer_idx=23, sae_path=sae_path)
 
     _, _, test_data = prepare_data(cisplatin_positive, cisplatin_negative)
-    test_data = test_data[:100]  # limit to 1000 samples for testing
+    test_data = test_data[:100]  # limit to 100 samples for testing
 
     # intervention
     print("------------ Intervention -----------")
-    probas, labels = test(feature, intervention_value, test_data, cnn_model, sae_model)
+    probas, labels = test(feature, intervention_value, test_data, cnn_model, sae_model, control=False)
 
     # baseline
     print("------------ Baseline -----------")
-    base_probas, base_labels = test(0, 0, test_data, cnn_model, sae_model)
+    base_probas, base_labels = test(0, 0, test_data, cnn_model, sae_model, control=True)
 
     # generate report
     print("Generating report...")
@@ -198,7 +202,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Analyze the effect of interventions on sequence features using a pre-trained model.")
     parser.add_argument("--feature", type=int, required=True, help="Feature index to intervene on (e.g. 3378, 791, 4096, etc.).")
-    parser.add_argument("--intervention_value", type=int, required=True, help="Value to increase the feature by (e.g. +1, +2, +10, etc.).")
+    parser.add_argument("--intervention_value", type=float, required=True, help="Value to multiply the feature by (e.g. 0.5, 2.0, 10.0, etc.).")
     parser.add_argument("--cnn", type=str, default="gs://hidden-state-genomics/cisplatinCNNheads/ef8/layer_23/features.pt", help="Path to the CNN feature model file.")
     parser.add_argument("--sae", type=str, default="gs://hidden-state-genomics/ef8/sae/layer_23.pt", help="Path to the SAE model file.")
     parser.add_argument("--cisplatin_positive", type=str, default="data/A2780_Cisplatin_Binding/cisplatin_pos.bed", help="Path to the positive cisplatin BED file.")
