@@ -121,7 +121,7 @@ def get_sequences_from_dataframe(df: pd.DataFrame, seqrepo: SeqRepo, pad_size: i
         try:
             seq = seqrepo.fetch(namespace="GRCh38", alias=chrom, start=start, end=end)
         except:
-            print(f"Error fetching sequence for {chrom}:{start}-{end}")
+#            print(f"Error fetching sequence for {chrom}:{start}-{end}")
             continue
 
         if row['strand'].strip() == '+':

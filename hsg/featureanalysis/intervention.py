@@ -1,4 +1,4 @@
-import torch
+import torch, nnsight
 from sklearn.metrics import accuracy_score, classification_report, roc_auc_score, roc_curve, confusion_matrix
 import matplotlib.pyplot as plt
 
@@ -41,11 +41,18 @@ def test(feature: int, intervention_value: int, sequences: list[str, torch.Tenso
                 modified_latent = latent
             else:
                 # amplify feature signal and suppress others
+                latent[:, feature] = torch.clamp(latent[:, feature], min=1.0) # allow actual activation, but avoid zeroing out
                 intervention_vec = torch.zeros_like(latent) # feature vector
                 intervention_vec[:, :] = 1/intervention_value # suppression rate
                 intervention_vec[:, feature] = intervention_value # feature weight
-                modified_latent = latent * intervention_vec
-                print(f"Modified latent{modified_latent.size()}")
+                modified_latent = latent * intervention_vec # element-wise multiplication
+                
+            # generate embeddings or use raw features depending on CNN head
+            if modified_latent.size(1) != cnn.input_dim:
+                decoder = sae.sae.decoder
+                modified_latent = decoder(modified_latent)
+                
+            # get predictions
             output = cnn.forward(cnn.pad_sequence(modified_latent, max_length=cnn.seq_length).unsqueeze(0))
             results.append(output.squeeze(0))
             labels.append(torch.Tensor(label))
