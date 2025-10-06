@@ -37,12 +37,15 @@ def test(feature: int, intervention_value: int, sequences: list[str, torch.Tenso
     for seq, label in tqdm(sequences):
         with torch.no_grad():
             latent = torch.squeeze(sae.forward(seq))
-            intervention_vec = torch.zeros_like(latent)
-            intervention_vec[:, feature] = intervention_value
             if control:
                 modified_latent = latent
             else:
-                modified_latent = intervention_vec.T.matmul(latent) # amplify feature signal and suppress others
+                # amplify feature signal and suppress others
+                intervention_vec = torch.zeros_like(latent) # feature vector
+                intervention_vec[:, :] = 1/intervention_value # suppression rate
+                intervention_vec[:, feature] = intervention_value # feature weight
+                modified_latent = latent * intervention_vec
+                print(f"Modified latent{modified_latent.size()}")
             output = cnn.forward(cnn.pad_sequence(modified_latent, max_length=cnn.seq_length).unsqueeze(0))
             results.append(output.squeeze(0))
             labels.append(torch.Tensor(label))
