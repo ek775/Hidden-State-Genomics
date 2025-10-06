@@ -1,0 +1,2 @@
+"ID","Description","GeneRatio","BgRatio","RichFactor","FoldEnrichment","zScore","pvalue","p.adjust","qvalue","geneID","Count"
+"GO:0044389","ubiquitin-like protein ligase binding","12/157","322/18639",0.0372670807453416,4.42433833128931,5.7128448203399,1.87400548388685e-05,0.00839554456781308,0.00718039995931382,"LRPPRC/PRKACA/PIAS2/WRAP53/SLF2/PRKAR2B/TUBB/YWHAE/CASC3/CBS/ITCH/RNF34",12

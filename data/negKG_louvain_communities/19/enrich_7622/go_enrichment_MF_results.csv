@@ -1,0 +1,2 @@
+"ID","Description","GeneRatio","BgRatio","RichFactor","FoldEnrichment","zScore","pvalue","p.adjust","qvalue","geneID","Count"
+"GO:0034236","protein kinase A catalytic subunit binding","4/223","14/18639",0.285714285714286,23.8808456117873,9.42415412213214,1.81717898042865e-05,0.00990362544333612,0.00904763850255525,"PRKAR2B/GSK3B/PRKAR1B/PRKAR2A",4

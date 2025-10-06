@@ -1,0 +1,2 @@
+"ID","Description","GeneRatio","BgRatio","RichFactor","FoldEnrichment","zScore","pvalue","p.adjust","qvalue","geneID","Count"
+"GO:0051018","protein kinase A binding","7/185","53/18639",0.132075471698113,13.3067822539521,8.98317261256465,8.87995285870764e-07,0.00042978971836145,0.000395391585182456,"PRKACA/AKAP8L/PRKAR2A/RDX/PRKAR2B/DACT3/PRKAR1B",7
