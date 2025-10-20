@@ -43,8 +43,8 @@ def test(feature: int, feat_min: int, act_factor: int, sequences: list[str, torc
                 # amplify feature signal and suppress others
                 latent[:, feature] = torch.clamp(latent[:, feature], min=feat_min) # allow actual activation, but avoid zeroing out
                 intervention_vec = torch.zeros_like(latent) # feature vector
-                intervention_vec[:, :] = 1/act_factor # suppression rate
-                intervention_vec[:, feature] = act_factor # feature weight
+                intervention_vec[:, :] = 1/act_factor if act_factor != 0 else 1 # suppression rate
+                intervention_vec[:, feature] = act_factor  if act_factor != 0 else 1 # feature weight
                 modified_latent = latent * intervention_vec # element-wise multiplication
                 
             # generate embeddings or use raw features depending on CNN head
