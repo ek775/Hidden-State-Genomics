@@ -1,10 +1,10 @@
 #!/bin/bash
 
 
-# run multiple intervention analyses on the central features
+# run multiple intervention analyses on the differentially central features
 
-cisplatin_positive=("407" "3378" "4793")
-cisplatin_negative=("3378" "7030" "8161")
+cisplatin_positive=("407" "3378" "4793" "2558" "1545")
+cisplatin_negative=("1422" "7030" "8161" "5984" "7949")
 
 # positive set
 for feature in "${cisplatin_positive[@]}"; do
