@@ -32,4 +32,7 @@ for feature in "${cisplatin_negative[@]}"; do
     ; done \
 ; done
 
+
+gsutil -m cp -r ./intervention_reports/ gs://hidden-state-genomics/featureanalysis/intervention_results/
+
 sudo shutdown -h now
