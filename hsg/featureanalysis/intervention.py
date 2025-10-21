@@ -43,8 +43,8 @@ def test(feature: int, feat_min: int, act_factor: int, sequences: list[str, torc
                 # amplify feature signal and suppress others
                 latent[:, feature] = torch.clamp(latent[:, feature], min=feat_min) # allow actual activation, but avoid zeroing out
                 intervention_vec = torch.zeros_like(latent) # feature vector
-                intervention_vec[:, :] = 1/act_factor # suppression rate
-                intervention_vec[:, feature] = act_factor # feature weight
+                intervention_vec[:, :] = 1/act_factor if act_factor != 0 else 0 # suppression rate
+                intervention_vec[:, feature] = act_factor  if act_factor != 0 else 1 # feature weight
                 modified_latent = latent * intervention_vec # element-wise multiplication
                 
             # generate embeddings or use raw features depending on CNN head
@@ -211,7 +211,7 @@ def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: 
     sae_model = get_latent_model(parent_model_path=os.environ["NT_MODEL"], layer_idx=23, sae_path=sae_path)
 
     _, _, test_data = prepare_data(cisplatin_positive, cisplatin_negative)
-    test_data = test_data[:100]  # limit to 100 samples for testing
+    test_data = test_data[:1000]  # limit to 1000 samples for time / resources
 
     # intervention
     print("------------ Intervention -----------")
@@ -243,5 +243,15 @@ if __name__ == "__main__":
     parser.add_argument("--cisplatin_negative", type=str, default="data/A2780_Cisplatin_Binding/cisplatin_neg_45k.bed", help="Path to the negative cisplatin BED file.")
 
     args = parser.parse_args()
+
+    print("---------- Intervention Parameters ----------")
+    print(f"Feature Index: {args.feature}")
+    print(f"Minimum Activation: {args.min_act}")
+    print(f"Activation Factor: {args.act_factor}")
+    print(f"CNN Model Path: {args.cnn}")
+    print(f"SAE Model Path: {args.sae}")
+    print(f"Cisplatin Positive BED: {args.cisplatin_positive}")
+    print(f"Cisplatin Negative BED: {args.cisplatin_negative}")
+    print("---------------------------------------------")
 
     main(args.feature, args.min_act, args.act_factor, args.cnn, args.sae, args.cisplatin_positive, args.cisplatin_negative)

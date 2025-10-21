@@ -1,15 +1,15 @@
 #!/bin/bash
 
 
-# run multiple intervention analyses on the central features
+# run multiple intervention analyses on the differentially central features
 
-cisplatin_positive=("407" "3378" "4793")
-cisplatin_negative=("3378" "7030" "8161")
+cisplatin_positive=("407" "3378" "4793" "2558" "1545")
+cisplatin_negative=("1422" "7030" "8161" "5984" "7949")
 
 # positive set
 for feature in "${cisplatin_positive[@]}"; do
-    for min_act in 0.1 1.0 10.0; do
-        for act_factor in 50.0 100.0; do
+    for min_act in 0.1 10.0; do
+        for act_factor in 0.0 10.0; do
             python -m hsg.featureanalysis.intervention \
                 --feature $feature \
                 --min_act $min_act \
@@ -21,8 +21,8 @@ for feature in "${cisplatin_positive[@]}"; do
 
 # negative set
 for feature in "${cisplatin_negative[@]}"; do
-    for min_act in 0.1 1.0 10.0; do
-        for act_factor in 50.0 100.0; do
+    for min_act in 0.1 10.0; do
+        for act_factor in 0.0 10.0; do
             python -m hsg.featureanalysis.intervention \
                 --feature $feature \
                 --min_act $min_act \
@@ -31,3 +31,8 @@ for feature in "${cisplatin_negative[@]}"; do
         ; done \
     ; done \
 ; done
+
+
+gsutil -m cp -r ./intervention_reports/ gs://hidden-state-genomics/featureanalysis/intervention_results/
+
+sudo shutdown -h now
