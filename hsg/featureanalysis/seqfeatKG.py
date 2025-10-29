@@ -63,7 +63,7 @@ def main(input: str, output: str, exp_factor: int = 8, layer_idx: int = 23, sae_
     if input.endswith(".bed"):
         seqrepo = SeqRepo(os.environ["SEQREPO_PATH"])
         sequences, dataframe = get_sequences_from_dataframe(
-            read_bed_file(input, max_columns=6, limit=100), # set limit for debugging 
+            read_bed_file(input, max_columns=6,), # limit=100), # set limit for debugging 
             pad_size=0, 
             seqrepo=seqrepo, 
             return_df=True,
