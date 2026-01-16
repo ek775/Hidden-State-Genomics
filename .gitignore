@@ -195,3 +195,7 @@ checkpoints/
 # ignore the test SQL database
 genome_databases/
 .Rproj.user
+
+# ignore ide and copilot files
+.vscode/
+.github/
