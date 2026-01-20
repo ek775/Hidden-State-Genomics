@@ -185,7 +185,8 @@ def generate_markdown_report(feature: int, feat_min: float, act_factor: float, p
     return report
 
 
-def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: str, cisplatin_positive: str, cisplatin_negative: str):
+def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: str, 
+         cisplatin_positive: str, cisplatin_negative: str, folder_name: str = "intervention_reports"):
 
     # check inputs and download models if needed
     if not os.path.exists(cisplatin_positive):
@@ -222,8 +223,10 @@ def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: 
     base_probas, base_labels = test(0, 0, 0, test_data, cnn_model, sae_model, control=True)
     # generate report
     print("Generating report...")
-    report = generate_markdown_report(feature, feat_min, act_factor, probas, labels, base_probas, base_labels)
-    report_path = f"intervention_reports/f{feature}_m{feat_min}_a{act_factor}/report.md"
+    save_dir = f"data/{folder_name}/f{feature}_m{feat_min}_a{act_factor}"
+    report = generate_markdown_report(feature, feat_min, act_factor, probas, labels, 
+                                      base_probas, base_labels, save_dir)
+    report_path = f"{save_dir}/report.md"
     with open(report_path, "w") as f:
         f.write(report)
     print(f"Report saved to {report_path}")
@@ -241,6 +244,7 @@ if __name__ == "__main__":
     parser.add_argument("--sae", type=str, default="gs://hidden-state-genomics/ef8/sae/layer_23.pt", help="Path to the SAE model file.")
     parser.add_argument("--cisplatin_positive", type=str, default="data/A2780_Cisplatin_Binding/cisplatin_pos.bed", help="Path to the positive cisplatin BED file.")
     parser.add_argument("--cisplatin_negative", type=str, default="data/A2780_Cisplatin_Binding/cisplatin_neg_45k.bed", help="Path to the negative cisplatin BED file.")
+    parser.add_argument("--folder-name", type=str, default="intervention_reports", help="Folder name to save intervention reports.")
 
     args = parser.parse_args()
 
