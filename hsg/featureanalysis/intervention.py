@@ -244,7 +244,7 @@ if __name__ == "__main__":
     parser.add_argument("--sae", type=str, default="gs://hidden-state-genomics/ef8/sae/layer_23.pt", help="Path to the SAE model file.")
     parser.add_argument("--cisplatin_positive", type=str, default="data/A2780_Cisplatin_Binding/cisplatin_pos.bed", help="Path to the positive cisplatin BED file.")
     parser.add_argument("--cisplatin_negative", type=str, default="data/A2780_Cisplatin_Binding/cisplatin_neg_45k.bed", help="Path to the negative cisplatin BED file.")
-    parser.add_argument("--folder-name", type=str, default="intervention_reports", help="Folder name to save intervention reports.")
+    parser.add_argument("--folder_name", type=str, default="intervention_reports", help="Folder name to save intervention reports.")
 
     args = parser.parse_args()
 
@@ -256,6 +256,8 @@ if __name__ == "__main__":
     print(f"SAE Model Path: {args.sae}")
     print(f"Cisplatin Positive BED: {args.cisplatin_positive}")
     print(f"Cisplatin Negative BED: {args.cisplatin_negative}")
+    print(f"Saving Results to {args.folder_name}")
     print("---------------------------------------------")
 
-    main(args.feature, args.min_act, args.act_factor, args.cnn, args.sae, args.cisplatin_positive, args.cisplatin_negative)
+    main(args.feature, args.min_act, args.act_factor, args.cnn, args.sae, 
+         args.cisplatin_positive, args.cisplatin_negative, args.folder_name)
