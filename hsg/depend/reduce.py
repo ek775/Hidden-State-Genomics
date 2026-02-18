@@ -40,9 +40,10 @@ def columnprojection(matrix: np.ndarray, normalize: bool = False) -> np.ndarray:
     """Project a vector onto the column space of a matrix."""
     assert matrix.shape[0] == matrix.shape[1], "matrix must be square"
     vector = np.ones(matrix.shape[0])
+    result = np.dot(vector, matrix)
     if normalize:
-        vector = minmax_normalize(vector)
-    return np.dot(vector, matrix)
+        result = minmax_normalize(result)
+    return result
 
 
 ###############################################################################
@@ -67,6 +68,10 @@ def eigenvec(matrix: np.ndarray) -> np.ndarray:
     
     return centrality
 
+##################################################################################
+# Information diffusion
+##################################################################################
+
 def probatransition(matrix: np.ndarray) -> np.ndarray:
     """Return the random walk transition probabilities of a graph (directed) represented by an adjacency matrix."""
     assert matrix.shape[0] == matrix.shape[1], "matrix must be square"
@@ -82,6 +87,10 @@ def laplacian(matrix: np.ndarray) -> np.ndarray:
     return laplacian
 
 
+
+###################################################################################
+# Test
+###################################################################################
 
 if __name__ == "__main__":
     from hsg.depend.featurewise import calculate_position_dependency_map
@@ -106,72 +115,28 @@ if __name__ == "__main__":
     print(f"Dependency map shape: {dep_map.shape}")
     print(f"Dependency map stats: min={dep_map.min():.4f}, max={dep_map.max():.4f}, mean={dep_map.mean():.4f}\n")
     
-    # Compute all vector reductions
-    print("="*70)
-    print("COMPUTING ALL REDUCTION FUNCTIONS")
-    print("="*70)
-    
-    diag = diagonal(dep_map, normalize=True)
-    row_proj = rowprojection(dep_map, normalize=True)
-    col_proj = columnprojection(dep_map, normalize=True)
-    eigen_cent = eigenvec(dep_map) # already normalized to unit norm
-    
-    print("\nVector reductions computed successfully.")
-    print(f"Expected shape: {diag.shape}\n")
-    
-    # Position-by-position comparison
-    print("="*100)
-    print("POSITION-BY-POSITION COMPARISON")
-    print("="*100)
-    print(f"{'Pos':<4} {'Base':<5} {'Diagonal':<12} {'Row Proj':<12} {'Col Proj':<12} {'Eigenvec':<12}")
-    print(f"{'':>4} {'':>5} {'(self-eff)':<12} {'(out-deg)':<12} {'(in-deg)':<12} {'(central)':<12}")
-    print("-"*100)
-    
-    for i in range(len(sequence)):
-        print(f"{i:<4} {sequence[i]:<5} {diag[i]:<12.6f} {row_proj[i]:<12.6f} {col_proj[i]:<12.6f} {eigen_cent[i]:<12.6f}")
-    
-    # Summary statistics
-    print("\n" + "="*100)
-    print("SUMMARY STATISTICS")
-    print("="*100)
-    
-    metrics = {
-        'Diagonal (self-effect)': diag,
-        'Row Projection (out-degree)': row_proj,
-        'Column Projection (in-degree)': col_proj,
-        'Eigenvector Centrality': eigen_cent
+    # Compute Information diffusion representations
+    random_walk = probatransition(dep_map)
+    snp_laplace = laplacian(dep_map)
+
+    # Compute Metrics on each representation
+    representations = {
+        "Raw": dep_map,
+        "Random Walk Transition": random_walk,
+        "Laplacian": snp_laplace
     }
-    
-    print(f"\n{'Metric':<35} {'Min':<12} {'Max':<12} {'Mean':<12} {'Std':<12}")
-    print("-"*100)
-    for name, vec in metrics.items():
-        print(f"{name:<35} {vec.min():<12.6f} {vec.max():<12.6f} {vec.mean():<12.6f} {vec.std():<12.6f}")
-    
-    # Top positions for each metric
-    print("\n" + "="*100)
-    print("TOP 5 POSITIONS BY EACH METRIC")
-    print("="*100)
-    
-    for name, vec in metrics.items():
-        top_indices = np.argsort(vec)[-5:][::-1]
-        print(f"\n{name}:")
-        print(f"  Positions: {top_indices}")
-        print(f"  Bases:     {[sequence[i] for i in top_indices]}")
-        print(f"  Values:    {[f'{vec[i]:.6f}' for i in top_indices]}")
-    
-    # Matrix reductions (just show info, not full matrices)
-    print("\n" + "="*100)
-    print("MATRIX REDUCTIONS (returns nxn matrices)")
-    print("="*100)
-    
-    trans_prob = probatransition(dep_map)
-    lap = laplacian(dep_map)
-    
-    print(f"\nTransition Probability Matrix (P = D^-1 * A):")
-    print(f"  Shape: {trans_prob.shape}")
-    print(trans_prob)
-    print(f"\nGraph Laplacian (L = D - A):")
-    print(f"  Shape: {lap.shape}")
-    print(lap)
-    
-    print("\n" + "="*100)
+
+    for name, matrix in representations.items():
+        print(f"=== {name} Representation ===\n")
+        diag = diagonal(matrix, normalize=True)
+        row_proj = rowprojection(matrix, normalize=True)
+        col_proj = columnprojection(matrix, normalize=True)
+        eigvec = eigenvec(matrix)
+        print(f"Diagonal: {diag}\n")
+        print(f"Diagonal Stats: min={diag.min():.4f}, max={diag.max():.4f}, mean={diag.mean():.4f}\n")
+        print(f"Row Projection: {row_proj}\n")
+        print(f"Row Projection Stats: min={row_proj.min():.4f}, max={row_proj.max():.4f}, mean={row_proj.mean():.4f}\n")
+        print(f"Column Projection: {col_proj}\n")
+        print(f"Column Projection Stats: min={col_proj.min():.4f}, max={col_proj.max():.4f}, mean={col_proj.mean():.4f}\n")
+        print(f"Eigenvector Centrality: {eigvec}\n")    
+        print(f"Eigenvector Centrality Stats: min={eigvec.min():.4f}, max={eigvec.max():.4f}, mean={eigvec.mean():.4f}\n")
