@@ -2,25 +2,46 @@ import numpy as np
 
 
 # Helper functions for reducing dependency maps (nxn matrices) to n-dimensional vectors or scalars, for use in HSG algorithms.
+def minmax_normalize(array: np.ndarray) -> np.ndarray:
+    """Min-max normalize an array to the range [0, 1].
+    Args:
+        array: NumPy array of any shape (1D vector, 2D matrix, etc.)
+        
+    Returns:
+        Normalized array with same shape, values in [0, 1]
+    """
+    min_val = np.min(array)
+    max_val = np.max(array)
+    if max_val - min_val == 0:
+        return np.zeros_like(array)  # Avoid division by zero
+    return (array - min_val) / (max_val - min_val)
 
 ##############################################################################
 # Matrix reduction functions
 ##############################################################################
-def diagonal(matrix: np.ndarray) -> np.ndarray:
+def diagonal(matrix: np.ndarray, normalize: bool = False) -> np.ndarray:
     """Return the diagonal elements of a matrix."""
     assert matrix.shape[0] == matrix.shape[1], "matrix must be square"
-    return np.diag(matrix)
+    diag = np.diag(matrix)
+    if normalize:
+        diag = minmax_normalize(diag)
+    return diag
 
-def rowprojection(matrix: np.ndarray) -> np.ndarray:
+def rowprojection(matrix: np.ndarray, normalize: bool = False) -> np.ndarray:
     """Project a vector onto the row space of a matrix."""
     assert matrix.shape[0] == matrix.shape[1], "matrix must be square"
     vector = np.ones(matrix.shape[0])
-    return np.dot(matrix, vector)
+    result = np.dot(matrix, vector)
+    if normalize:
+        result = minmax_normalize(result)
+    return result
 
-def columnprojection(matrix: np.ndarray) -> np.ndarray:
+def columnprojection(matrix: np.ndarray, normalize: bool = False) -> np.ndarray:
     """Project a vector onto the column space of a matrix."""
     assert matrix.shape[0] == matrix.shape[1], "matrix must be square"
     vector = np.ones(matrix.shape[0])
+    if normalize:
+        vector = minmax_normalize(vector)
     return np.dot(vector, matrix)
 
 
@@ -68,6 +89,7 @@ if __name__ == "__main__":
     import os
     
     sequence = "CAGGAAGGAGGATGGAGGCTGGTGGGAGGG"
+    feature_id = 3378
     
     # Load model
     print("Loading nucleotide transformer and SAE...")
@@ -76,8 +98,7 @@ if __name__ == "__main__":
     model = get_latent_model(nt_model_path, layer_idx=23, sae_path=sae_checkpoint)
     
     # Calculate dependency map for a featured RNA G-quadruplex sequence
-    feature_id = 3378
-    print(f"\nCalculating dependency map for sequence (length {len(sequence)} bp)")
+    print(f"\nCalculating dependency map (f/{feature_id}) for sequence (length {len(sequence)} bp)")
     print(f"Sequence: {sequence}")
     print(f"Feature ID: {feature_id}\n")
     
@@ -90,10 +111,10 @@ if __name__ == "__main__":
     print("COMPUTING ALL REDUCTION FUNCTIONS")
     print("="*70)
     
-    diag = diagonal(dep_map)
-    row_proj = rowprojection(dep_map)
-    col_proj = columnprojection(dep_map)
-    eigen_cent = eigenvec(dep_map)
+    diag = diagonal(dep_map, normalize=True)
+    row_proj = rowprojection(dep_map, normalize=True)
+    col_proj = columnprojection(dep_map, normalize=True)
+    eigen_cent = eigenvec(dep_map) # already normalized to unit norm
     
     print("\nVector reductions computed successfully.")
     print(f"Expected shape: {diag.shape}\n")
@@ -148,12 +169,9 @@ if __name__ == "__main__":
     
     print(f"\nTransition Probability Matrix (P = D^-1 * A):")
     print(f"  Shape: {trans_prob.shape}")
-    print(f"  Row sums (should be 1): min={trans_prob.sum(axis=1).min():.6f}, max={trans_prob.sum(axis=1).max():.6f}")
-    print(f"  Example row {np.argmax(row_proj)}: {trans_prob[np.argmax(row_proj), :5]}")
-    
+    print(trans_prob)
     print(f"\nGraph Laplacian (L = D - A):")
     print(f"  Shape: {lap.shape}")
-    print(f"  Row sums (should be ~0): min={lap.sum(axis=1).min():.6f}, max={lap.sum(axis=1).max():.6f}")
-    print(f"  Diagonal: {diagonal(lap)[:5]}")
+    print(lap)
     
     print("\n" + "="*100)
