@@ -9,9 +9,8 @@ from typing import Union, Optional
 
 def extract_mmcif_from_json(
     json_file: Union[str, Path],
-    output_file: Optional[Union[str, Path]] = None,
-    structure_index: int = 0
-) -> str:
+    structure_index: int = None
+) -> list[str]:
     """
     Extract mmCIF string from a JSON file and optionally save it to a properly formatted mmCIF file.
     
@@ -20,11 +19,10 @@ def extract_mmcif_from_json(
     
     Args:
         json_file: Path to the JSON file containing the structure data.
-        output_file: Optional path to save the mmCIF file. If None, only returns the string.
         structure_index: Index of the structure in the "structures" array (default: 0).
     
     Returns:
-        The mmCIF formatted structure string.
+        A list of mmCIF formatted structure strings.
     
     Raises:
         FileNotFoundError: If the JSON file doesn't exist.
@@ -67,39 +65,30 @@ def extract_mmcif_from_json(
         raise ValueError("'structures' must be a non-empty list")
     
     # Extract structure at specified index
-    try:
-        structure_data = structures[structure_index]
-    except IndexError:
-        raise IndexError(
-            f"structure_index {structure_index} out of range "
-            f"(available: 0-{len(structures)-1})"
-        )
+    strings = []
+    if structure_index:
+        try:
+            struct = structures[structure_index]
+            if "structure" not in struct:
+                raise KeyError(f"Structure at index {structure_index} missing 'structure' key")
+            strings.append(struct["structure"])
+        except IndexError:
+            raise IndexError(
+                f"structure_index {structure_index} out of range "
+                f"(available: 0-{len(structures)-1})"
+            )
+    # extract all structures if no index specified
+    else:
+        for idx, values in enumerate(structures):
+            if "structure" not in values:
+                raise KeyError(f"Structure at index {idx} missing 'structure' key")
+            else:
+                strings.append(values["structure"])
     
-    if "structure" not in structure_data:
-        raise KeyError(f"Structure at index {structure_index} missing 'structure' key")
-    
-    mmcif_string = structure_data["structure"]
-    
-    if not isinstance(mmcif_string, str) or not mmcif_string.strip():
-        raise ValueError("mmCIF structure data is empty or invalid")
-    
-    # Optionally write to file
-    if output_file is not None:
-        output_path = Path(output_file)
-        
-        # Create parent directories if they don't exist
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Write the mmCIF string to file
-        with open(output_path, 'w') as f:
-            f.write(mmcif_string)
-        
-        print(f"mmCIF file written to: {output_path}")
-    
-    return mmcif_string
+    return strings
 
 
-def generate_mmcif_filename(json_file: Union[str, Path], suffix: str = ".cif") -> Path:
+def generate_mmcif_filename(json_file: Union[str, Path], suffix: str = ".cif", struct_idx: int = None) -> Path:
     """
     Generate an output mmCIF filename based on the input JSON filename.
     
@@ -115,6 +104,8 @@ def generate_mmcif_filename(json_file: Union[str, Path], suffix: str = ".cif") -
         PosixPath('chrX:19836171-19836201(-).cif')
     """
     json_path = Path(json_file)
+    if struct_idx is not None:
+        suffix = f".{struct_idx}{suffix}"
     return json_path.with_suffix(suffix)
 
 
@@ -154,15 +145,22 @@ def batch_extract_mmcif(
     
     for json_file in json_files:
         try:
-            output_file = output_path / generate_mmcif_filename(json_file.name)
-            extract_mmcif_from_json(json_file, output_file)
-            created_files.append(output_file)
+            cifstrings = extract_mmcif_from_json(json_file)
+            for idx, cif in enumerate(cifstrings):
+                output_file = output_path / generate_mmcif_filename(json_file.name, struct_idx=idx)
+                with open(output_file, 'w') as f:
+                    f.write(cif)
+                created_files.append(output_file)
         except Exception as e:
             print(f"Error processing {json_file.name}: {e}")
             continue
     
     print(f"\nProcessed {len(created_files)}/{len(json_files)} files successfully")
     return created_files
+
+
+
+
 
 
 if __name__ == "__main__":
@@ -184,6 +182,13 @@ if __name__ == "__main__":
     else:
         json_file = sys.argv[1]
         output_file = sys.argv[2] if len(sys.argv) > 2 else None
-        if output_file is None:
-            output_file = str(generate_mmcif_filename(json_file))
-        extract_mmcif_from_json(json_file, output_file)
+        cifstrings = extract_mmcif_from_json(json_file)
+        if output_file:
+            for idx, cif in enumerate(cifstrings):
+                out_file = generate_mmcif_filename(json_file, struct_idx=idx) if len(cifstrings) > 1 else output_file
+                with open(out_file, 'w') as f:
+                    f.write(cif)
+                print(f"mmCIF structure saved to {out_file}")
+        else:
+            for cif in cifstrings:
+                print(cif)
