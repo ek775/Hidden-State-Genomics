@@ -4,8 +4,8 @@ cisplatin_positive=("3378")
 
 # positive set
 for feature in "${cisplatin_positive[@]}"; do
-    for min_act in 0.0 0.5 1.0 5.0 8.0; do
-        for act_factor in 1.0 5.0 8.0; do
+    for min_act in 0.0 0.5 1.0 5.0 8.0 10.0 12.0; do
+        for act_factor in 0.5 1.0 5.0 8.0 12.0 15.0; do
             python -m hsg.featureanalysis.intervention \
                 --feature $feature \
                 --min_act $min_act \

@@ -38,6 +38,7 @@ dependencies = [
     "bokeh",
     "holoviews",
     "gffutils",
+    "fastapi",
 ]
 
 [build-system]
