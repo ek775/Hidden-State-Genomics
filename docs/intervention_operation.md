@@ -81,6 +81,8 @@ In the codebase implementation:
 - `feat_min` corresponds to $\tau$
 - `intervention_vec` corresponds to $\mathbf{v}$
 - `modified_latent` corresponds to $\mathbf{z}'$
+- `CNNHead.forward()` returns class logits (not probabilities)
+- `hsg/featureanalysis/intervention.py` applies `torch.softmax(logits, dim=1)` only at inference/reporting time before ROC/AUC and probability plots
 
 ## Applications
 

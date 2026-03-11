@@ -338,7 +338,7 @@ def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, ear
 
     # Train embedding model
     if condition in ["embeddings", "all"]:
-        embedding_head = CNNHead(input_dim=upstream_model.parent_model.esm.encoder.layer[layer_idx].output.dense.out_features, seq_length=1000, output_dim=2)
+        embedding_head = CNNHead(input_dim=upstream_model.parent_model.esm.encoder.layer[layer_idx].output.dense.out_features, output_dim=2)
         embedding_head = train(
             upstream_model, 
             embedding_head, 
@@ -358,7 +358,7 @@ def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, ear
 
     # Train feature model
     if condition in ["features", "all"]:
-        feature_head = CNNHead(input_dim=upstream_model.sae.dict_size, seq_length=1000, output_dim=2)
+        feature_head = CNNHead(input_dim=upstream_model.sae.dict_size, output_dim=2)
         feature_head = train(
             upstream_model, 
             feature_head, 
@@ -380,7 +380,7 @@ def main(cisplatin_positive, cisplatin_negative, layer_idx=23, exp_factor=8, ear
     if condition in ["raw_tokens", "all"]:
         from hsg.cisplatinRNA.vectorizer import Vectorizer
         vectorizer = Vectorizer()
-        raw_tokens_head = CNNHead(input_dim=upstream_model.sae.dict_size, seq_length=1000, output_dim=2)
+        raw_tokens_head = CNNHead(input_dim=upstream_model.sae.dict_size, output_dim=2)
         raw_tokens_head = train(
             upstream_model, 
             raw_tokens_head, 
