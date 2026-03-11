@@ -118,14 +118,23 @@ def generate_markdown_report(feature: int, feat_min: float, act_factor: float, p
     plt.savefig(os.path.join(save_dir, 'roc_curve.png'))
     plt.close()
 
-    # plot the probability distributions
+    # plot the probability distributions using shared bin edges for fair comparison
+    intervention_scores = probas[:, 1]
+    baseline_scores = base_probas[:, 1]
+    intervention_scores = intervention_scores[np.isfinite(intervention_scores)]
+    baseline_scores = baseline_scores[np.isfinite(baseline_scores)]
+    # Probabilities should be in [0, 1], so use fixed bins to avoid per-series auto-binning artifacts.
+    prob_bins = np.linspace(0.0, 1.0, 101)
+
     plt.figure()
-    plt.hist(probas[:, 1], bins=50, alpha=0.5, label='Intervention', color='blue')
-    plt.hist(base_probas[:, 1], bins=50, alpha=0.5, label='Baseline', color='orange')
+    plt.hist(intervention_scores, bins=prob_bins, alpha=0.5, label='Intervention', color='blue')
+    plt.hist(baseline_scores, bins=prob_bins, alpha=0.5, label='Baseline', color='orange')
+    plt.axvline(0.5, color='red', linestyle=':', linewidth=1.5, label='Threshold = 0.5')
     plt.xlabel('Predicted Probability')
     plt.ylabel('Count')
-    plt.title('Predicted Probability Distributions')
-    plt.legend(loc='upper center')
+    plt.title(f'Predicted Probability Distributions (Feature {feature})')
+    plt.legend(loc='upper right')
+    plt.tight_layout()
     plt.savefig(os.path.join(save_dir, 'probability_distributions.png'))
     plt.close()
 
@@ -215,7 +224,7 @@ def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: 
     sae_model = get_latent_model(parent_model_path=os.environ["NT_MODEL"], layer_idx=23, sae_path=sae_path)
 
     _, _, test_data = prepare_data(cisplatin_positive, cisplatin_negative)
-    test_data = test_data[:1000]  # limit to 1000 samples for time / resources
+    test_data = test_data[:100]  # limit to 1000 samples for time / resources
 
     # intervention
     print("------------ Intervention -----------")
