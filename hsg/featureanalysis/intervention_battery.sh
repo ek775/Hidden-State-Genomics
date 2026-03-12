@@ -14,7 +14,7 @@ for feature in "${cisplatin_positive[@]}"; do
                 --feature $feature \
                 --min_act $min_act \
                 --act_factor $act_factor \
-                --cnn gs://hidden-state-genomics/cisplatinCNNheads/ef8_refined/embeddings.pt \
+                --cnn gs://hidden-state-genomics/cisplatinCNNheads/ef8/layer_23/embeddings.pt \
         ; done \
     ; done \
 ; done
@@ -27,7 +27,7 @@ for feature in "${cisplatin_negative[@]}"; do
                 --feature $feature \
                 --min_act $min_act \
                 --act_factor $act_factor \
-                --cnn gs://hidden-state-genomics/cisplatinCNNheads/ef8_refined/embeddings.pt \
+                --cnn gs://hidden-state-genomics/cisplatinCNNheads/ef8/layer_23/embeddings.pt \
         ; done \
     ; done \
 ; done

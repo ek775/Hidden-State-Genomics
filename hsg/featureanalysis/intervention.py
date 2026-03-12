@@ -224,7 +224,7 @@ def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: 
     sae_model = get_latent_model(parent_model_path=os.environ["NT_MODEL"], layer_idx=23, sae_path=sae_path)
 
     _, _, test_data = prepare_data(cisplatin_positive, cisplatin_negative)
-    test_data = test_data[:100]  # limit to 1000 samples for time / resources
+    test_data = test_data[:1000]  # limit to 1000 samples for time / resources
 
     # intervention
     print("------------ Intervention -----------")
