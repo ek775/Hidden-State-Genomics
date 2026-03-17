@@ -1,7 +1,8 @@
 ---
 title: "Hidden State Genomics: *An Examination of Sparse Auto-Encoder Feature Granularity on Genomic Language Models*"
 author: Eliot Kmiec, Samuel O'Brien, Matthew McCoy
-date: March 31, 2026 \ Georgetown Univeristy
+date: March 31, 2026 
+subtitle: Georgetown University
 geometry: margin=3cm
 output: pdf_document
 header-includes:
