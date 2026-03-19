@@ -3,12 +3,12 @@
 
 # run multiple intervention analyses on the differentially central features
 
-cisplatin_positive=("407" "3378" "4793" "2558" "1545")
-cisplatin_negative=("1422" "7030" "8161" "5984" "7949")
+cisplatin_positive=(1371 9853 407 8596 6445 4157)
+cisplatin_negative=(9021 2453 8161 6576 1422 7030)
 
 # positive set
 for feature in "${cisplatin_positive[@]}"; do
-    for min_act in 0.1 15.0; do
+    for min_act in 0.1 10.0 15.0; do
         for act_factor in 0.0 10.0; do
             python -m hsg.featureanalysis.intervention \
                 --feature $feature \
@@ -21,7 +21,7 @@ for feature in "${cisplatin_positive[@]}"; do
 
 # negative set
 for feature in "${cisplatin_negative[@]}"; do
-    for min_act in 0.1 15.0; do
+    for min_act in 0.1 10.0 15.0; do
         for act_factor in 0.0 10.0; do
             python -m hsg.featureanalysis.intervention \
                 --feature $feature \
