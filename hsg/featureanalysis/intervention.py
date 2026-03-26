@@ -198,7 +198,7 @@ def generate_markdown_report(feature: int, feat_min: float, act_factor: float, p
 
 def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: str,
          cisplatin_positive: str, cisplatin_negative: str, folder_name: str = "intervention_reports",
-         max_length: int = 1000):
+         max_length: int = 1000, max_seqs: int = 1000):
 
     # check inputs and download models if needed
     if not os.path.exists(cisplatin_positive):
@@ -224,7 +224,7 @@ def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: 
     sae_model = get_latent_model(parent_model_path=os.environ["NT_MODEL"], layer_idx=23, sae_path=sae_path)
 
     _, _, test_data = prepare_data(cisplatin_positive, cisplatin_negative)
-    test_data = test_data[:1000]  # limit to 1000 samples for time / resources
+    test_data = test_data[:max_seqs]  # limit to max_seqs samples for time / resources
 
     # intervention
     print("------------ Intervention -----------")
@@ -258,6 +258,7 @@ if __name__ == "__main__":
     parser.add_argument("--cisplatin_negative", type=str, default="data/A2780_Cisplatin_Binding/cisplatin_neg_45k.bed", help="Path to the negative cisplatin BED file.")
     parser.add_argument("--folder_name", type=str, default="intervention_reports", help="Folder name to save intervention reports.")
     parser.add_argument("--max_length", type=int, default=1000, help="Sequence length used to pad CNN inputs.")
+    parser.add_argument("--max_seqs", type=int, default=1000, help="Maximum number of sequences to test (for time/resource constraints).")
 
     args = parser.parse_args()
 
@@ -270,9 +271,10 @@ if __name__ == "__main__":
     print(f"Cisplatin Positive BED: {args.cisplatin_positive}")
     print(f"Cisplatin Negative BED: {args.cisplatin_negative}")
     print(f"Max Sequence Length: {args.max_length}")
+    print(f"Max Sequences: {args.max_seqs}")
     print(f"Saving Results to {args.folder_name}")
     print("---------------------------------------------")
 
     main(args.feature, args.min_act, args.act_factor, args.cnn, args.sae,
          args.cisplatin_positive, args.cisplatin_negative, args.folder_name,
-         args.max_length)
+         args.max_length, args.max_seqs)

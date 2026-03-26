@@ -4,7 +4,7 @@
 | Metric           | Intervention | Baseline |
 |------------------|--------------|----------|
 | Accuracy         | 0.5020     | 0.9870   |
-| ROC AUC          | 0.5110     | 0.9940   |
+| ROC AUC          | 0.4819     | 0.9925   |
 
 ## Detailed Classification Report (Intervention)
 
@@ -19,7 +19,7 @@
 weighted avg       0.25      0.50      0.34      1000
 
 ```
-![Confusion Matrix (Intervention)](/data/intervention_reports/f9021_m15.0_a0.0/confusion_matrix_intervention.png)
+![Confusion Matrix (Intervention)](/data/intervention_reports/f928_m15.0_a0.0/confusion_matrix_intervention.png)
 
 ## Detailed Classification Report (Baseline)
 
@@ -34,12 +34,12 @@ weighted avg       0.25      0.50      0.34      1000
 weighted avg       0.99      0.99      0.99      1000
 
 ```
-![Confusion Matrix (Baseline)](/data/intervention_reports/f9021_m15.0_a0.0/confusion_matrix_baseline.png)
+![Confusion Matrix (Baseline)](/data/intervention_reports/f928_m15.0_a0.0/confusion_matrix_baseline.png)
 
 ## ROC Curve
 
-![ROC Curve](/data/intervention_reports/f9021_m15.0_a0.0/roc_curve.png)
+![ROC Curve](/data/intervention_reports/f928_m15.0_a0.0/roc_curve.png)
 
 ## Predicted Probability Distributions
 
-![Probability Distributions](/data/intervention_reports/f9021_m15.0_a0.0/probability_distributions.png)
+![Probability Distributions](/data/intervention_reports/f928_m15.0_a0.0/probability_distributions.png)
