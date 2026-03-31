@@ -9,6 +9,7 @@ from hsg.stattools.features import get_latent_model
 from google.cloud import storage
 from tqdm import tqdm
 import os
+from typing import Union
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -113,7 +114,7 @@ def generate_markdown_report(feature: int, feat_min: float, act_factor: float, p
     plt.plot([0, 1], [0, 1], 'k--')
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title('ROC Curve')
+    plt.title(f'ROC Curves (Feature {feature})')
     plt.legend(loc='lower right')
     plt.savefig(os.path.join(save_dir, 'roc_curve.png'))
     plt.close()
@@ -141,7 +142,7 @@ def generate_markdown_report(feature: int, feat_min: float, act_factor: float, p
     # plot confusion matrices
     plt.figure()
     plt.matshow(conf_matrix, cmap=plt.cm.Blues)
-    plt.title('Confusion Matrix (Intervention)')
+    plt.title(f'Confusion Matrix (Intervention, Feature {feature})')
     plt.colorbar()
     plt.xlabel('Predicted')
     plt.ylabel('Actual')
@@ -152,7 +153,7 @@ def generate_markdown_report(feature: int, feat_min: float, act_factor: float, p
 
     plt.figure()
     plt.matshow(base_conf_matrix, cmap=plt.cm.Blues)
-    plt.title('Confusion Matrix (Baseline)')
+    plt.title(f'Confusion Matrix (Baseline, Feature {feature})')
     plt.colorbar()
     plt.xlabel('Predicted')
     plt.ylabel('Actual')
@@ -196,7 +197,7 @@ def generate_markdown_report(feature: int, feat_min: float, act_factor: float, p
     return report
 
 
-def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: str,
+def main(feature: Union[int, list[int]], feat_min: int, act_factor: int, cnn_path: str, sae_path: str,
          cisplatin_positive: str, cisplatin_negative: str, folder_name: str = "intervention_reports",
          max_length: int = 1000, max_seqs: int = 1000):
 
@@ -223,25 +224,45 @@ def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: 
     cnn_model = torch.load(cnn_path)
     sae_model = get_latent_model(parent_model_path=os.environ["NT_MODEL"], layer_idx=23, sae_path=sae_path)
 
-    _, _, test_data = prepare_data(cisplatin_positive, cisplatin_negative)
+    _, _, test_data = prepare_data(cisplatin_positive, cisplatin_negative) # Note random seed = 42 is set in prepare_data for reproducibility
     test_data = test_data[:max_seqs]  # limit to max_seqs samples for time / resources
-
-    # intervention
-    print("------------ Intervention -----------")
-    probas, labels = test(feature, feat_min, act_factor, test_data, cnn_model, sae_model, control=False, max_length=max_length)
 
     # baseline
     print("------------ Baseline -----------")
     base_probas, base_labels = test(0, 0, 0, test_data, cnn_model, sae_model, control=True, max_length=max_length)
-    # generate report
-    print("Generating report...")
-    save_dir = f"data/{folder_name}/f{feature}_m{feat_min}_a{act_factor}"
-    report = generate_markdown_report(feature, feat_min, act_factor, probas, labels, 
-                                      base_probas, base_labels, save_dir)
-    report_path = f"{save_dir}/report.md"
-    with open(report_path, "w") as f:
-        f.write(report)
-    print(f"Report saved to {report_path}")
+
+    # intervention
+    if isinstance(feature, int):
+        print("------------ Intervention -----------")
+        probas, labels = test(feature, feat_min, act_factor, test_data, cnn_model, sae_model, control=False, max_length=max_length)
+
+        # generate report
+        print("Generating report...")
+        save_dir = f"data/{folder_name}/f{feature}_m{feat_min}_a{act_factor}"
+        report = generate_markdown_report(feature, feat_min, act_factor, probas, labels, 
+                                        base_probas, base_labels, save_dir)
+        report_path = f"{save_dir}/report.md"
+        with open(report_path, "w") as f:
+            f.write(report)
+        print(f"Report saved to {report_path}")
+
+    if isinstance(feature, list):
+        for feat in feature:
+            print(f"------------ Intervention on Feature {feat} -----------")
+            probas, labels = test(feat, feat_min, act_factor, test_data, cnn_model, sae_model, control=False, max_length=max_length)
+
+            # generate report
+            print("Generating report...")
+            save_dir = f"data/{folder_name}/f{feat}_m{feat_min}_a{act_factor}"
+            report = generate_markdown_report(feat, feat_min, act_factor, probas, labels, 
+                                            base_probas, base_labels, save_dir)
+            report_path = f"{save_dir}/report.md"
+            with open(report_path, "w") as f:
+                f.write(report)
+            print(f"Report saved to {report_path}")
+
+    else:
+        raise ValueError("Feature must be an integer or a list of integers.")
 
 
 
@@ -249,7 +270,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Analyze the effect of interventions on sequence features using a pre-trained model.")
-    parser.add_argument("--feature", type=int, required=True, help="Feature index to intervene on (e.g. 3378, 791, 4096, etc.).")
+    parser.add_argument("--feature", type=int, nargs='+', required=True, help="Feature index or indices to intervene on (e.g. 3378, 791, 4096, etc.).")
     parser.add_argument("--min_act", type=float, default=1.0, help="Minimum activation value for the feature during intervention.")
     parser.add_argument("--act_factor", type=float, default=50.0, help="Activation factor to multiply the feature by during intervention.")
     parser.add_argument("--cnn", type=str, default="gs://hidden-state-genomics/cisplatinCNNheads/ef8/layer_23/features.pt", help="Path to the CNN feature model file.")
