@@ -3,20 +3,20 @@
 
 | Metric           | Intervention | Baseline |
 |------------------|--------------|----------|
-| Accuracy         | 0.5100     | 0.9760   |
-| ROC AUC          | 0.5649     | 0.9896   |
+| Accuracy         | 0.5100     | 0.9800   |
+| ROC AUC          | 0.5714     | 0.9957   |
 
 ## Detailed Classification Report (Intervention)
 
 ```
               precision    recall  f1-score   support
 
-           0       0.70      0.03      0.05       498
-           1       0.51      0.99      0.67       502
+           0       0.62      0.04      0.08       498
+           1       0.51      0.97      0.67       502
 
     accuracy                           0.51      1000
-   macro avg       0.60      0.51      0.36      1000
-weighted avg       0.60      0.51      0.36      1000
+   macro avg       0.56      0.51      0.37      1000
+weighted avg       0.56      0.51      0.37      1000
 
 ```
 ![Confusion Matrix (Intervention)](/data/intervention_reports/positive//f8596_m0.1_a0.0/confusion_matrix_intervention.png)

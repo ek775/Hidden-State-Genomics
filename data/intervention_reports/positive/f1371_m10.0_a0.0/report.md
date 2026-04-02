@@ -4,7 +4,7 @@
 | Metric           | Intervention | Baseline |
 |------------------|--------------|----------|
 | Accuracy         | 0.5020     | 0.9820   |
-| ROC AUC          | 0.9458     | 0.9929   |
+| ROC AUC          | 0.9578     | 0.9928   |
 
 ## Detailed Classification Report (Intervention)
 

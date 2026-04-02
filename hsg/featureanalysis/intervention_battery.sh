@@ -3,7 +3,7 @@
 
 # run multiple intervention analyses on the differentially central features
 
-cisplatin_positive=(1371 9853 8596 407 3901)
+cisplatin_positive=(1371 9853 8596 407 6445)
 cisplatin_negative=(9021 8161 2453 2778 6421)
 
 # positive set

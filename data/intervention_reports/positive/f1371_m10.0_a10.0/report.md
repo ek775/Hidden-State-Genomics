@@ -3,8 +3,8 @@
 
 | Metric           | Intervention | Baseline |
 |------------------|--------------|----------|
-| Accuracy         | 0.9310     | 0.9760   |
-| ROC AUC          | 0.9874     | 0.9917   |
+| Accuracy         | 0.9310     | 0.9820   |
+| ROC AUC          | 0.9881     | 0.9925   |
 
 ## Detailed Classification Report (Intervention)
 
@@ -26,8 +26,8 @@ weighted avg       0.94      0.93      0.93      1000
 ```
               precision    recall  f1-score   support
 
-           0       1.00      0.95      0.98       498
-           1       0.95      1.00      0.98       502
+           0       1.00      0.96      0.98       498
+           1       0.97      1.00      0.98       502
 
     accuracy                           0.98      1000
    macro avg       0.98      0.98      0.98      1000
