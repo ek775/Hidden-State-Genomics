@@ -1,0 +1,45 @@
+
+# Intervention Report
+
+| Metric           | Intervention | Baseline |
+|------------------|--------------|----------|
+| Accuracy         | 0.7000     | 0.9820   |
+| ROC AUC          | 0.9212     | 0.9928   |
+
+## Detailed Classification Report (Intervention)
+
+```
+              precision    recall  f1-score   support
+
+           0       1.00      0.40      0.57       498
+           1       0.63      1.00      0.77       502
+
+    accuracy                           0.70      1000
+   macro avg       0.81      0.70      0.67      1000
+weighted avg       0.81      0.70      0.67      1000
+
+```
+![Confusion Matrix (Intervention)](/data/intervention_reports/positive//f6445_m10.0_a0.0/confusion_matrix_intervention.png)
+
+## Detailed Classification Report (Baseline)
+
+```
+              precision    recall  f1-score   support
+
+           0       1.00      0.96      0.98       498
+           1       0.97      1.00      0.98       502
+
+    accuracy                           0.98      1000
+   macro avg       0.98      0.98      0.98      1000
+weighted avg       0.98      0.98      0.98      1000
+
+```
+![Confusion Matrix (Baseline)](/data/intervention_reports/positive//f6445_m10.0_a0.0/confusion_matrix_baseline.png)
+
+## ROC Curve
+
+![ROC Curve](/data/intervention_reports/positive//f6445_m10.0_a0.0/roc_curve.png)
+
+## Predicted Probability Distributions
+
+![Probability Distributions](/data/intervention_reports/positive//f6445_m10.0_a0.0/probability_distributions.png)

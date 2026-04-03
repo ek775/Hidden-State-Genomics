@@ -9,13 +9,14 @@ from hsg.stattools.features import get_latent_model
 from google.cloud import storage
 from tqdm import tqdm
 import os
+from typing import Union
 
 from dotenv import load_dotenv
 load_dotenv()
 
 
 
-def test(feature: int, feat_min: int, act_factor: int, sequences: list[str, torch.Tensor], cnn, sae, control: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
+def test(feature: int, feat_min: int, act_factor: int, sequences: list[str, torch.Tensor], cnn, sae, control: bool = False, max_length: int = 1000) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Test the effect of intervening on a specific feature in the latent space.
 
@@ -27,6 +28,7 @@ def test(feature: int, feat_min: int, act_factor: int, sequences: list[str, torc
         cnn (CNNHead): The pre-trained CNN model for feature extraction.
         sae (torch.nn.Module): The pre-trained SAE model for latent representation.
         control (bool): Whether to run the control test without intervention.
+        max_length (int): Sequence length used to pad inputs for CNN inference.
 
     Returns:
         predictions (torch.Tensor): The model class prediction probabilities after intervention.
@@ -53,8 +55,9 @@ def test(feature: int, feat_min: int, act_factor: int, sequences: list[str, torc
                 modified_latent = decoder(modified_latent)
                 
             # get predictions
-            output = cnn.forward(cnn.pad_sequence(modified_latent, max_length=cnn.seq_length).unsqueeze(0))
-            results.append(output.squeeze(0))
+            modified_latent = cnn.pad_sequence(modified_latent, max_length=max_length).unsqueeze(0)
+            logits = cnn.forward(modified_latent)
+            results.append(torch.softmax(logits, dim=1).squeeze(0))
             labels.append(torch.Tensor(label))
 
     return torch.stack(results), torch.stack(labels)
@@ -111,26 +114,35 @@ def generate_markdown_report(feature: int, feat_min: float, act_factor: float, p
     plt.plot([0, 1], [0, 1], 'k--')
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title('ROC Curve')
+    plt.title(f'ROC Curves (Feature {feature})')
     plt.legend(loc='lower right')
     plt.savefig(os.path.join(save_dir, 'roc_curve.png'))
     plt.close()
 
-    # plot the probability distributions
+    # plot the probability distributions using shared bin edges for fair comparison
+    intervention_scores = probas[:, 1]
+    baseline_scores = base_probas[:, 1]
+    intervention_scores = intervention_scores[np.isfinite(intervention_scores)]
+    baseline_scores = baseline_scores[np.isfinite(baseline_scores)]
+    # Probabilities should be in [0, 1], so use fixed bins to avoid per-series auto-binning artifacts.
+    prob_bins = np.linspace(0.0, 1.0, 101)
+
     plt.figure()
-    plt.hist(probas[:, 1], bins=50, alpha=0.5, label='Intervention', color='blue')
-    plt.hist(base_probas[:, 1], bins=50, alpha=0.5, label='Baseline', color='orange')
+    plt.hist(intervention_scores, bins=prob_bins, alpha=0.5, label='Intervention', color='blue')
+    plt.hist(baseline_scores, bins=prob_bins, alpha=0.5, label='Baseline', color='orange')
+    plt.axvline(0.5, color='red', linestyle=':', linewidth=1.5, label='Threshold = 0.5')
     plt.xlabel('Predicted Probability')
     plt.ylabel('Count')
-    plt.title('Predicted Probability Distributions')
-    plt.legend(loc='upper center')
+    plt.title(f'Predicted Probability Distributions (Feature {feature})')
+    plt.legend(loc='upper right')
+    plt.tight_layout()
     plt.savefig(os.path.join(save_dir, 'probability_distributions.png'))
     plt.close()
 
     # plot confusion matrices
     plt.figure()
     plt.matshow(conf_matrix, cmap=plt.cm.Blues)
-    plt.title('Confusion Matrix (Intervention)')
+    plt.title(f'Confusion Matrix (Intervention, Feature {feature})')
     plt.colorbar()
     plt.xlabel('Predicted')
     plt.ylabel('Actual')
@@ -141,7 +153,7 @@ def generate_markdown_report(feature: int, feat_min: float, act_factor: float, p
 
     plt.figure()
     plt.matshow(base_conf_matrix, cmap=plt.cm.Blues)
-    plt.title('Confusion Matrix (Baseline)')
+    plt.title(f'Confusion Matrix (Baseline, Feature {feature})')
     plt.colorbar()
     plt.xlabel('Predicted')
     plt.ylabel('Actual')
@@ -185,8 +197,9 @@ def generate_markdown_report(feature: int, feat_min: float, act_factor: float, p
     return report
 
 
-def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: str, 
-         cisplatin_positive: str, cisplatin_negative: str, folder_name: str = "intervention_reports"):
+def main(feature: Union[int, list[int]], feat_min: int, act_factor: int, cnn_path: str, sae_path: str,
+         cisplatin_positive: str, cisplatin_negative: str, folder_name: str = "intervention_reports",
+         max_length: int = 1000, max_seqs: int = 1000):
 
     # check inputs and download models if needed
     if not os.path.exists(cisplatin_positive):
@@ -211,25 +224,45 @@ def main(feature: int, feat_min: int, act_factor: int, cnn_path: str, sae_path: 
     cnn_model = torch.load(cnn_path)
     sae_model = get_latent_model(parent_model_path=os.environ["NT_MODEL"], layer_idx=23, sae_path=sae_path)
 
-    _, _, test_data = prepare_data(cisplatin_positive, cisplatin_negative)
-    test_data = test_data[:1000]  # limit to 1000 samples for time / resources
-
-    # intervention
-    print("------------ Intervention -----------")
-    probas, labels = test(feature, feat_min, act_factor, test_data, cnn_model, sae_model, control=False)
+    _, _, test_data = prepare_data(cisplatin_positive, cisplatin_negative) # Note random seed = 42 is set in prepare_data for reproducibility
+    test_data = test_data[:max_seqs]  # limit to max_seqs samples for time / resources
 
     # baseline
     print("------------ Baseline -----------")
-    base_probas, base_labels = test(0, 0, 0, test_data, cnn_model, sae_model, control=True)
-    # generate report
-    print("Generating report...")
-    save_dir = f"data/{folder_name}/f{feature}_m{feat_min}_a{act_factor}"
-    report = generate_markdown_report(feature, feat_min, act_factor, probas, labels, 
-                                      base_probas, base_labels, save_dir)
-    report_path = f"{save_dir}/report.md"
-    with open(report_path, "w") as f:
-        f.write(report)
-    print(f"Report saved to {report_path}")
+    base_probas, base_labels = test(0, 0, 0, test_data, cnn_model, sae_model, control=True, max_length=max_length)
+
+    # intervention
+    if isinstance(feature, int):
+        print("------------ Intervention -----------")
+        probas, labels = test(feature, feat_min, act_factor, test_data, cnn_model, sae_model, control=False, max_length=max_length)
+
+        # generate report
+        print("Generating report...")
+        save_dir = f"data/{folder_name}/f{feature}_m{feat_min}_a{act_factor}"
+        report = generate_markdown_report(feature, feat_min, act_factor, probas, labels, 
+                                        base_probas, base_labels, save_dir)
+        report_path = f"{save_dir}/report.md"
+        with open(report_path, "w") as f:
+            f.write(report)
+        print(f"Report saved to {report_path}")
+
+    if isinstance(feature, list):
+        for feat in feature:
+            print(f"------------ Intervention on Feature {feat} -----------")
+            probas, labels = test(feat, feat_min, act_factor, test_data, cnn_model, sae_model, control=False, max_length=max_length)
+
+            # generate report
+            print("Generating report...")
+            save_dir = f"data/{folder_name}/f{feat}_m{feat_min}_a{act_factor}"
+            report = generate_markdown_report(feat, feat_min, act_factor, probas, labels, 
+                                            base_probas, base_labels, save_dir)
+            report_path = f"{save_dir}/report.md"
+            with open(report_path, "w") as f:
+                f.write(report)
+            print(f"Report saved to {report_path}")
+
+    else:
+        raise ValueError("Feature must be an integer or a list of integers.")
 
 
 
@@ -237,7 +270,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Analyze the effect of interventions on sequence features using a pre-trained model.")
-    parser.add_argument("--feature", type=int, required=True, help="Feature index to intervene on (e.g. 3378, 791, 4096, etc.).")
+    parser.add_argument("--feature", type=int, nargs='+', required=True, help="Feature index or indices to intervene on (e.g. 3378, 791, 4096, etc.).")
     parser.add_argument("--min_act", type=float, default=1.0, help="Minimum activation value for the feature during intervention.")
     parser.add_argument("--act_factor", type=float, default=50.0, help="Activation factor to multiply the feature by during intervention.")
     parser.add_argument("--cnn", type=str, default="gs://hidden-state-genomics/cisplatinCNNheads/ef8/layer_23/features.pt", help="Path to the CNN feature model file.")
@@ -245,6 +278,8 @@ if __name__ == "__main__":
     parser.add_argument("--cisplatin_positive", type=str, default="data/A2780_Cisplatin_Binding/cisplatin_pos.bed", help="Path to the positive cisplatin BED file.")
     parser.add_argument("--cisplatin_negative", type=str, default="data/A2780_Cisplatin_Binding/cisplatin_neg_45k.bed", help="Path to the negative cisplatin BED file.")
     parser.add_argument("--folder_name", type=str, default="intervention_reports", help="Folder name to save intervention reports.")
+    parser.add_argument("--max_length", type=int, default=1000, help="Sequence length used to pad CNN inputs.")
+    parser.add_argument("--max_seqs", type=int, default=1000, help="Maximum number of sequences to test (for time/resource constraints).")
 
     args = parser.parse_args()
 
@@ -256,8 +291,11 @@ if __name__ == "__main__":
     print(f"SAE Model Path: {args.sae}")
     print(f"Cisplatin Positive BED: {args.cisplatin_positive}")
     print(f"Cisplatin Negative BED: {args.cisplatin_negative}")
+    print(f"Max Sequence Length: {args.max_length}")
+    print(f"Max Sequences: {args.max_seqs}")
     print(f"Saving Results to {args.folder_name}")
     print("---------------------------------------------")
 
-    main(args.feature, args.min_act, args.act_factor, args.cnn, args.sae, 
-         args.cisplatin_positive, args.cisplatin_negative, args.folder_name)
+    main(args.feature, args.min_act, args.act_factor, args.cnn, args.sae,
+         args.cisplatin_positive, args.cisplatin_negative, args.folder_name,
+         args.max_length, args.max_seqs)

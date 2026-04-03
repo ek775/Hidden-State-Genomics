@@ -171,6 +171,7 @@ data/variant_summary.txt
 data/clingen_w_seqs.csv
 # ignore Nair et al. datasets, large KGs if uncompressed
 data/A2780_Cisplatin_Binding
+data/Nair_cisplatin_oct_25
 *.bam
 *.bai
 data/cisplatin_pos_kg_cyto.json

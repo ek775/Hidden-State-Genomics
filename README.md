@@ -1,8 +1,10 @@
-# Hidden-State-Genomics
+# Hidden State Genomics: *An Examination of Sparse Auto-Encoder Feature Granularity on Genomic Language Models*
 
-## Introduction
+## Abstract / Introduction
 
-Advances in Mechanistic Interpretability have made it possible to decompose neural network activations into interpretable features via sparse auto-encoders. These features represent concepts that are learned by the model, and can be used to understand how a neural network makes its predictions. Early mechanistic interpretability studies on protein language models have led to speculation that studying the internals of these models may reveal novel biology, however, investigating this theory poses a difficult technical challenge. We attempt to answer this question by constructing and exploring knowledge-graph relationships between features extracted from genomic language model embeddings and predicted RNA structures for novel cisplatin-RNA complexes. 
+Advances in Mechanistic Interpretability have made it possible to decompose neural network activations into interpretable features via sparse auto-encoders (SAEs). This repository contains the code and data supporting our investigation into what pre-trained genomic language models (gLMs) encode. 
+
+We applied SAEs across all 24 encoder layers of InstaDeep’s Nucleotide Transformer v2 (500M), exploring latent features. We found that correlation-based annotation against reference regulatory tracks (such as NCBI RefSeq) was inconsistent across layers and insufficient for causal interpretation. To address this, we constructed typed token-to-feature knowledge graphs, comparing cisplatin-binding versus non-binding sequence communities using PageRank centrality. We further validated candidate features using decoder-based interventions and a CNN binding classifier, revealing that gLM representations may align more strongly with tightly coupled molecular interactions and local biophysical constraints rather than broadly distributed regulatory logic.
 
 **Contents**
 - [Architecture Overview](#architecture-overview)
@@ -13,27 +15,26 @@ Advances in Mechanistic Interpretability have made it possible to decompose neur
 
 ### Multi-Edge SAE Knowledge Graphs
 
-*Multi-Layer Directed SAE knowledge graph on a random selection of cisplatin binding motifs. The basic knowledge graph is constructed from per-token strongest feature activations with associations drawn according to the triplet (subject, object, predicate) where (token, feature, sequenceID) includes metadata containing NCBI refseq annotations as found in the UCSC genome broswer. Red nodes indicate a feature, blue nodes indicate a token, and nodes are connected based on the presence of a token causing feature activation. Edge metadata is used for gene set enrichment analysis.*
-
-![Figure 2](selected_cisplatinbinding_seqs.png)
+*Multi-Layer Directed SAE knowledge graph on a random selection of cisplatin binding motifs. The basic knowledge graph is constructed from per-token strongest feature activations with associations drawn according to the triplet (subject, object, predicate). Edge metadata is used for gene set enrichment analysis.*
 
 ## Architecture Overview
 
 ### Core Pipeline Components
 
-**Data Flow**: `Genomic sequences → NT embeddings → SAE features → Knowledge graphs → Biological analysis`
+**Data Flow**: `Genomic sequences → NT embeddings → SAE features → Knowledge graphs & CNN Binding Classifiers → Biological & Causal Analysis`
 
 - **`hsg/sae/`**: Sparse Auto-Encoder training and feature extraction
   - `train.py` - Main SAE training with CLI via `tapify()`
   - `dictionary.py` - AutoEncoder implementation for sparse feature learning
-  - Supports expansion factors (ef8, ef16, ef32) to control dictionary size
+  - Supports expansion factors (ef8, ef16, ef32) trained across 24 layers of NTv2-500m.
 - **`hsg/pipelines/`**: Data processing and model integration
-  - `hidden_state.py` - Extract embeddings from nucleotide transformer models
-  - `variantmap.py` - DNA variant processing using HGVS and SeqRepo
-- **`hsg/featureanalysis/`**: Knowledge graph construction and analysis
-  - `featureKG.py` - Main KG construction from SAE features
-  - `intervention.py` - Feature intervention experiments
-  - Shell scripts for batch processing large datasets
+  - `hidden_state.py` - Extract embeddings from nucleotide transformer models (InstaDeepAI NTv2-500m-human-ref).
+  - `variantmap.py` - DNA variant processing using HGVS and SeqRepo.
+- **`hsg/featureanalysis/`**: Knowledge graph construction and intervention analysis
+  - `seqfeatKG.py` - Construct sequence-to-feature MultiDiGraphs to evaluate SAE activation patterns.
+  - `featureKG.py` - Construct token-to-feature MultiDiGraphs to evaluate SAE activation patterns.
+  - `intervention.py` - Feature steering experiments using SAE decoders, validated against a CNN binder classifier for Cisplatin.
+  - Shell scripts for batch processing large datasets.
 
 ### Data Organization
 
@@ -47,16 +48,10 @@ Advances in Mechanistic Interpretability have made it possible to decompose neur
 
 ### External Dependencies
 
-- **InstaDeepAI Nucleotide Transformer** (500M parameters)
+- **InstaDeepAI Nucleotide Transformer** (NTv2-500M-Human-Ref)
 - **SeqRepo**: Local genomic sequence database
 - **MAFFT**: Multiple sequence alignment
 - **Google Cloud Storage**: Large model/dataset storage 
-
-### Gene Set Enrichment Analysis of SAE Features (Feature 3378)
-
-*High-centrality feature-derived gene set enrichment for SAE feature 3378 (layer 23, ef8), derived from PageRank centrality score in a knowledge graph generated from putative cisplatin-binding transcripts in the human genome. In the enriched gene set graph for feature 3378, we can see enriched GO term DAG structure and general biological processes identifiable from DNA sequences alone using genomic language model features extracted via SAE.*
-
-![Figure 3](data/gene_sets/enrich_3378/go_enrichment_BP_network.png)
 
 ## Core Workflows
 
