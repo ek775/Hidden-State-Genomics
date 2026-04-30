@@ -1,202 +1,186 @@
-# Hidden State Genomics: *An Examination of Sparse Auto-Encoder Feature Granularity on Genomic Language Models*
+# Hidden State Genomics
 
-## Abstract / Introduction
+Graph-based analysis of sparse autoencoder (SAE) feature activity in genomic language models (gLMs).
 
-Advances in Mechanistic Interpretability have made it possible to decompose neural network activations into interpretable features via sparse auto-encoders (SAEs). This repository contains the code and data supporting our investigation into what pre-trained genomic language models (gLMs) encode. 
+This repository contains the codebase, analysis workflows, and manuscript assets for Hidden State Genomics, a mechanistic interpretability study of the InstaDeep Nucleotide Transformer.
 
-We applied SAEs across all 24 encoder layers of InstaDeep’s Nucleotide Transformer v2 (500M), exploring latent features. We found that correlation-based annotation against reference regulatory tracks (such as NCBI RefSeq) was inconsistent across layers and insufficient for causal interpretation. To address this, we constructed typed token-to-feature knowledge graphs, comparing cisplatin-binding versus non-binding sequence communities using PageRank centrality. We further validated candidate features using decoder-based interventions and a CNN binding classifier, revealing that gLM representations may align more strongly with tightly coupled molecular interactions and local biophysical constraints rather than broadly distributed regulatory logic.
+## Study Overview
 
-**Contents**
-- [Architecture Overview](#architecture-overview)
-- [Example Graph Analysis](#multi-edge-sae-knowledge-graphs)
-- [Core Workflows](#core-workflows)
-- [Setup/Installation](#setup-instructions)
-- [Development Guide](#development-guide)
+The computational pipeline used in this study is:
 
-### Multi-Edge SAE Knowledge Graphs
+`genomic sequences -> transformer hidden states -> SAE latents -> graph + intervention analysis -> biological hypotheses`
 
-*Multi-Layer Directed SAE knowledge graph on a random selection of cisplatin binding motifs. The basic knowledge graph is constructed from per-token strongest feature activations with associations drawn according to the triplet (subject, object, predicate). Edge metadata is used for gene set enrichment analysis.*
+Core methodological components implemented in this repository include:
 
-## Architecture Overview
+- Training SAEs over NTv2 hidden states across encoder layers.
+- Constructing typed token-to-feature and sequence-to-feature multigraphs.
+- Comparing cisplatin-binding and non-binding sequence communities.
+- Performing latent interventions with downstream CNN-based evaluation.
 
-### Core Pipeline Components
+## Repository Structure
 
-**Data Flow**: `Genomic sequences → NT embeddings → SAE features → Knowledge graphs & CNN Binding Classifiers → Biological & Causal Analysis`
+- `hsg/sae/`: SAE architecture, training loop, and training protocol code.
+- `hsg/stattools/`: wrappers for loading parent model + SAE for inference.
+- `hsg/pipelines/`: hidden state extraction, variant mapping, and data ETL utilities.
+- `hsg/featureanalysis/`: knowledge graph construction, correlation analysis, and interventions.
+- `hsg/cisplatinRNA/`: downstream CNN classifier heads and training scripts.
+- `hsg/depend/`: dependency/sensitivity mapping utilities.
+- `hsg/tests/`: environment, pipeline, and SAE unit tests.
+- `publication/`: manuscript and figures.
+- `data/`: local datasets, annotations, and generated analysis outputs.
+- `checkpoints/`: SAE checkpoints and metadata.
 
-- **`hsg/sae/`**: Sparse Auto-Encoder training and feature extraction
-  - `train.py` - Main SAE training with CLI via `tapify()`
-  - `dictionary.py` - AutoEncoder implementation for sparse feature learning
-  - Supports expansion factors (ef8, ef16, ef32) trained across 24 layers of NTv2-500m.
-- **`hsg/pipelines/`**: Data processing and model integration
-  - `hidden_state.py` - Extract embeddings from nucleotide transformer models (InstaDeepAI NTv2-500m-human-ref).
-  - `variantmap.py` - DNA variant processing using HGVS and SeqRepo.
-- **`hsg/featureanalysis/`**: Knowledge graph construction and intervention analysis
-  - `seqfeatKG.py` - Construct sequence-to-feature MultiDiGraphs to evaluate SAE activation patterns.
-  - `featureKG.py` - Construct token-to-feature MultiDiGraphs to evaluate SAE activation patterns.
-  - `intervention.py` - Feature steering experiments using SAE decoders, validated against a CNN binder classifier for Cisplatin.
-  - Shell scripts for batch processing large datasets.
+## Software Requirements
 
-### Data Organization
+- Python `3.12.8` (pinned in `pyproject.toml`)
+- PyTorch `2.5.1`
+- transformers `4.47.1`
+- biocommons-seqrepo `0.6.9`
+- hgvs `1.5.4`
+- gffutils
 
-- **`data/`**: Large datasets (not tracked in git)
-  - Cisplatin binding data: `cisplatin_pos.fa`, `cisplatin_neg45k.fa`
-  - Knowledge graphs: `*_kg.json` files
-  - Reference annotations: `Annotation Data/` with GTF files
-  - Gene sets and enrichment results: `gene_sets/`, `*_gene_sets/`
-- **`checkpoints/`**: Trained SAE models organized by expansion factor
-- **`notebook_stash/`**: Analysis notebooks for visualization and exploration
+Pinned dependency versions are declared in `pyproject.toml`.
 
-### External Dependencies
+## Installation
 
-- **InstaDeepAI Nucleotide Transformer** (NTv2-500M-Human-Ref)
-- **SeqRepo**: Local genomic sequence database
-- **MAFFT**: Multiple sequence alignment
-- **Google Cloud Storage**: Large model/dataset storage 
-
-## Core Workflows
-
-### SAE Training
-Train sparse auto-encoders on nucleotide transformer embeddings:
+1. Clone the repository and move to the project root.
 
 ```bash
-python -m hsg.sae.train --model_name $NT_MODEL --layer_idx 23 --expansion_factor 8
+git clone <your-fork-or-origin-url>
+cd Hidden-State-Genomics
 ```
 
-Models are saved to `checkpoints/` with TensorBoard logging for training metrics.
-
-### Knowledge Graph Construction
-Generate knowledge graphs from SAE features and genomic sequences:
+2. Create and activate a Python 3.12.8 environment.
 
 ```bash
-python -m hsg.featureanalysis.featureKG --input data/sequences.fa --output data/output_kg.json
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 ```
 
-### Feature Intervention Analysis
-Test feature importance via controlled interventions:
+3. Install the project in editable mode.
 
 ```bash
-python -m hsg.featureanalysis.intervention --feature 3378 --min_act 0.1 --act_factor 10.0
+pip install -e .
 ```
 
-### Batch Processing
-Large-scale analysis using shell scripts in `hsg/featureanalysis/`:
+4. Pull the SeqRepo database (if not already available locally).
 
 ```bash
-# Process multiple sequence files
-./hsg/featureanalysis/largeKGconstruction.sh
-
-# Run intervention battery across parameter grids
-./hsg/featureanalysis/intervention_battery.sh
+seqrepo --root-dir ./data/2024-12-20 pull
 ```
 
-## Development Guide
+## Environment Configuration
 
-### Command-Line Interface Pattern
-
-All main scripts use `tap` (typed-argument-parser) for CLI with the pattern:
-
-```python
-from tap import tapify
-
-def main_function(arg1: str, arg2: int = 8):
-    """Function docstring becomes help text"""
-    pass
-
-if __name__ == "__main__":
-    tapify(main_function)
-```
-
-Run modules as: `python -m hsg.module.script --arguments`
-
-### Environment Variables
-
-**Critical**: Always load environment variables first in scripts:
-
-```python
-from dotenv import load_dotenv
-load_dotenv()
-```
-
-### Testing
-
-Run the full test suite from project root:
+Create a `.env` file in the repository root.
 
 ```bash
-python -m unittest  # Basic run
-python -m unittest -v  # Verbose output
+NT_MODEL="InstaDeepAI/nucleotide-transformer-500m-human-ref"
+SEQREPO_PATH="./data/2024-12-20"
+REFSEQ_CACHE="./data/refseq_cache.txt"
+REFSEQ_GTF="./data/Annotation Data/hg38.ncbiRefSeq.gtf"
+GCLOUD_BUCKET="gs://hidden-state-genomics"
+CLIN_GEN_CSV="./data/erepo.tabbed.txt"
+CLIN_VAR_CSV="./data/variant_summary.txt"
 ```
 
-Key test categories:
-- Environment variables (`test_env_vars.py`)
-- Pipeline integration (`test_pipelines.py`) 
-- SAE objects (`test_sae_objects.py`)
+Notes:
+- Most scripts call `load_dotenv()` and expect these variables to be present.
+- Paths may be absolute or relative to the repository root.
 
-### Memory Management
+## Reproducible Workflows
 
-The codebase includes automatic GPU/CPU fallback patterns:
+### 1) SAE Training Across Layers
 
-```python
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-try:
-    model.to(device)
-except torch.OutOfMemoryError:
-    device = torch.device("cpu")
-    model.to(device)
+`hsg/sae/train.py` exposes a command-line interface via `tapify(train_all_layers)`.
+
+```bash
+python -m hsg.sae.train \
+   --parent_model "$NT_MODEL" \
+   --SAE_directory "./checkpoints/hidden-state-genomics/ef8/sae" \
+   --log_dir "./log_dir" \
+   --epochs 100 \
+   --dict_expansion_factor 8 \
+   --learning_rate 1e-3 \
+   --l1_penalty 1e-3 \
+   --l1_annealing_steps 100
 ```
 
-### File Naming Conventions
+### 2) Token-Feature Knowledge Graph Construction
 
-- SAE checkpoints: `checkpoints/{expansion_factor}/layer_{idx}/`
-- Knowledge graphs: `{dataset}_kg.json`
-- Intervention results: `intervention_reports/feature_{id}/`
-- Gene sets: `{dataset}_gene_sets/enrich_{feature_id}/`
+```bash
+python -m hsg.featureanalysis.featureKG \
+   --input data/cisplatin_pos.fa \
+   --output data/cisplatin_pos_kg.json \
+   --exp_factor 8 \
+   --layer_idx 23
+```
 
-## Notes
+### 3) Feature Intervention Analysis
 
-The repository is organized with data I/O in the `data/` folder and code under `hsg/`. Most scripts run as command-line tools from the root directory. Large datasets and trained models are stored externally (Google Cloud) due to size constraints. External bioinformatics tools like MAFFT are required for some analyses. See individual data directories for documentation on data sources and processing tools.
+```bash
+python -m hsg.featureanalysis.intervention \
+   --feature 3378 \
+   --min_act 0.1 \
+   --act_factor 10.0 \
+   --cnn gs://hidden-state-genomics/cisplatinCNNheads/ef8/layer_23/features.pt \
+   --sae gs://hidden-state-genomics/ef8/sae/layer_23.pt \
+   --cisplatin_positive data/A2780_Cisplatin_Binding/cisplatin_pos.bed \
+   --cisplatin_negative data/A2780_Cisplatin_Binding/cisplatin_neg_45k.bed
+```
 
-## Setup Instructions
+### 4) CNN Head Training for Downstream Classification
 
-1. **Clone the repository**
+```bash
+python -m hsg.cisplatinRNA.CNNtrain \
+   --cisplatin_positive data/A2780_Cisplatin_Binding/cisplatin_pos.bed \
+   --cisplatin_negative data/A2780_Cisplatin_Binding/cisplatin_neg_45k.bed \
+   --layer_idx 23 \
+   --exp_factor 8 \
+   --condition all
+```
 
-2. **Download the ClinGen and ClinVar datasets from the google drive shared folder**
-   - Place these inside the data directory, but you can place them anywhere convenient
+## Reproducibility Notes
 
-3. **Install the dependencies in an environment of your choice**
-   - The code below executes a pip install in "editable" mode using the pyproject.toml specifications
+- SAE checkpoints are organized by expansion factor and layer in `checkpoints/`.
+- Generated intervention outputs are stored in `data/intervention_reports/`.
+- Knowledge graphs are serialized to JSON (`*_kg.json`) in a NetworkX-compatible format.
+- Large artifacts can be staged in Google Cloud Storage (`gs://hidden-state-genomics/`).
+- If CUDA memory is insufficient, key model-loading paths attempt CPU fallback.
 
-   ```bash
-   pip install -e .
-   # OR
-   pip install -e [this repository]
-   ```
+## Validation and Tests
 
-4. **Install a local biocommons.seqrepo database**
-   - Full documentation: <https://hgvs.readthedocs.io/en/stable/installation.html#installing-seqrepo-optional>
+Run the full test suite:
 
-   ```bash
-   seqrepo --root-dir ./data pull
-   ```
+```bash
+python -m unittest
+```
 
-5. **Add a `.env` file in the root directory to specify directories**
-   - This file is not tracked by git, but python-dotenv uses it to load environment variables to reduce hardcoding of data directories since the files are too large to be tracked as part of the repo
-   - Example configuration:
+Run specific test modules:
 
-   ```bash
-   # core environment variables
-   CLIN_GEN_CSV="~/Hidden-State-Genomics/data/erepo.tabbed.txt"
-   CLIN_VAR_CSV="~/Hidden-State-Genomics/data/variant_summary.txt"
-   NT_MODEL="InstaDeepAI/nucleotide-transformer-500m-human-ref"
-   GCLOUD_BUCKET="gs://hidden-state-genomics"
-   SEQREPO_PATH="./data/2024-12-20"
-   REFSEQ_CACHE="./data/refseq_cache.txt"
-   REFSEQ_GTF="data/Annotation Data/hg38.ncbiRefSeq.gtf"
-   ```
+```bash
+python -m unittest -v hsg.tests.test_env_vars
+python -m unittest -v hsg.tests.test_pipelines
+python -m unittest -v hsg.tests.test_sae_objects
+```
 
-6. **Run unit tests to ensure everything is working**
+## Data and Code Access
 
-   ```bash
-   python -m unittest  # Basic run
-   python -m unittest -v  # Verbose output
-   ```
+- Source code: https://github.com/ek775/Hidden-State-Genomics
+- Sequence inputs and generated outputs are organized under `data/` (some large files are not tracked in git history).
+- Reference genome and annotation assets are derived from GRCh38/hg38 and NCBI RefSeq/UCSC resources.
+
+## Citation
+
+If you use this repository, please cite the Hidden State Genomics manuscript (`publication/manuscript.md`) and the relevant upstream model and data sources (including Nucleotide Transformer and SeqRepo).
+
+## License
+
+This project is released under CC0-1.0 (see `LICENSE`).
+
+## Contact
+
+- Eliot Kmiec - ek990@georgetown.edu
+- Samuel O'Brien - sto31@georgetown.edu
+- Matthew McCoy - mdm299@georgetown.edu
 
