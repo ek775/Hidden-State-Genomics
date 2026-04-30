@@ -12,7 +12,7 @@ header-includes:
 
 ## Abstract
 
-Pre-trained genomic language model (gLM) representations have been anticipated to enable enhanced deep learning predictions on several genomics tasks, but current benchmarking has led to questions over what they actually encode. We studied this with mechanistic interpretability on InstaDeep’s Nucleotide Transformer v2 (500M), training sparse autoencoders across all 24 encoder layers to probe latent features. Correlation-based annotation against reference regulatory tracks was inconsistent across layers and insufficient for causal interpretation. We therefore built typed sequence-to-feature knowledge graphs to explore the SAE feature space and compared cisplatin-binding versus non-binding sequence communities by PageRank centrality, validating candidate features with decoder-based interventions and a CNN binding classifier. Interventions showed asymmetric effects: suppressive features could collapse predictive signal, while binding-associated features shifted predictions cumulatively with the presence of other binding-associated signals. Dependency maps further indicated strong local feature sensitivity within sequences. Together, these results provide evidence that gLM representations encode highly granular sequence syntax and conservation patterns, aligning more strongly with tightly coupled molecular interactions and local biophysical constraints than with complex, distributed regulatory logic. Within the scope of our intervention setting, this pattern is consistent with stronger performance on selected molecular tasks and weaker performance on broader regulatory inference, motivating scalable methods for causal feature annotation.
+Pre-trained genomic language model (gLM) representations have been anticipated to enable enhanced deep learning predictions on several genomics tasks, but current benchmarking has led to questions over what they actually encode. We studied this with mechanistic interpretability on InstaDeep’s Nucleotide Transformer v2 (500M), training sparse autoencoders across all 24 encoder layers to probe latent features. Correlation-based annotation against reference regulatory tracks was inconsistent across layers and insufficient for causal interpretation. We therefore built typed sequence-to-feature knowledge graphs to explore the SAE feature space and compared cisplatin-binding versus non-binding RNA sequence communities by PageRank centrality, validating candidate features with decoder-based interventions and a CNN binding classifier. Interventions showed asymmetric effects: suppressive features could collapse predictive signal, while binding-associated features shifted predictions cumulatively with the presence of other binding-associated signals. Dependency maps further indicated strong local feature sensitivity within sequences. Together, these results provide evidence that gLM representations encode highly granular sequence syntax and conservation patterns, aligning more strongly with tightly coupled molecular interactions and local biophysical constraints than with complex, distributed regulatory logic. Within the scope of our intervention setting, this pattern is consistent with stronger performance on selected molecular tasks and weaker performance on broader regulatory inference, motivating scalable methods for causal feature annotation.
 
 ## Background
 
@@ -139,9 +139,9 @@ The current standard for validating feature annotations is to use the SAE decode
 
 Because the generative head of a gLM produces artificial DNA sequences that are themselves uninterpretable by humans, we trained a convolutional neural network (CNN) classification head on NTv2 embeddings to predict whether a sequence would bind or not bind Cisplatin based on the data provided by Krishnaraj and colleagues [[12](#ref-12)]. The CNN was composed of 2 convolution layers and 2 max pooling layers with a single linear layer out. The convolution kernel was 1 dimensional, sliding across the sequence, while the pooling layers operated on the embedding dimension, gradually reducing the representation down to a logit vector used to compute class probabilities. Using cross-entropy loss, we trained the CNN for up to 100 epochs on shards from an 80:20 train-test data split combining ~44 thousand binding sequences with ~40 thousand non-binding sequences. Early stopping was conditioned on decreasing loss over 10 epochs and triggered after 33 epochs, resulting in a model with a test accuracy of 96.2% and an F1 score of 0.9648 after only seeing 33% of the training set. Using the 20% holdout set of test data, we used the unseen sequences to perform steering experiments using the 8x expansion SAE for layer 23 of the NTv2 encoder to create modified embeddings as input to the CNN classification head.
 
-In prior studies, simple clamping of feature values to a given threshold produced desirable shifts in model behavior [[6](#ref-6), [7](#ref-7), [8](#ref-8)]. However, the therapeutic context of cisplatin exposure is inherently artificial, leading to unexpected probability shifts in the CNN classification head as shown in *Figure 7*. As a result, we found it necessary to experiment with various intervention patterns to elicit the underlying mechanisms. We adopted a grid search intervention protocol involving initial clamping of the selected feature to a minimum value across each token position, followed by element-wise multiplication of an intervention matrix to scale targeted features by a factor $\alpha$ and non-targeted features by $1/\alpha$, as described below. For latent matrix $Z \in \mathbb{R}^{n \times D}$, target feature $f$, minimum activation $\tau$, and scale $\alpha$:
+In prior studies, simple clamping of feature values to a given threshold produced desirable shifts in model behavior [[6](#ref-6), [7](#ref-7), [8](#ref-8)]. However, the therapeutic context of cisplatin exposure is inherently artificial, leading to unexpected probability shifts in the CNN classification head as shown in *Figure 7*. As a result, we found it necessary to experiment with various intervention patterns to elicit the underlying mechanisms. We adopted a grid search intervention protocol involving initial clamping of the selected feature to a minimum value across each token position, followed by element-wise multiplication of an intervention matrix to scale targeted features by a factor $\alpha$ and non-targeted features by $1/\alpha$, as described below. For latent matrix $Z \in \mathbb{R}^{n \times D}$, target feature $f$, minimum activation $\delta$, and scale $\alpha$:
 
-$$Z_{:,f} \leftarrow \max(Z_{:,f},\, \tau), \qquad Z'_{i,j} = Z_{i,j} \cdot \begin{cases} \alpha, & j = f \\ 1/\alpha, & j \neq f \end{cases}$$
+$$Z_{:,f} \leftarrow \max(Z_{:,f},\, \delta), \qquad Z'_{i,j} = Z_{i,j} \cdot \begin{cases} \alpha, & j = f \\ 1/\alpha, & j \neq f \end{cases}$$
 
 A complete formal definition is provided in the supplementary materials. Because of the computational requirements of grid search algorithms, we limited our sequence sample size to the first 1000 sequences from the test holdout set.
 
@@ -244,6 +244,14 @@ Our findings contribute a mechanistic understanding of why gLMs perform as they 
 
 For mechanistic interpretability in particular, the extraction of SAE latents has already been demonstrated at scale [[1](#ref-1)], but the annotation and exploration of what those latents mean still has major obstacles to overcome. We demonstrated several innovations that may contribute to addressing those challenges, but they primarily address epistemic limitations and still scale with exponential complexity, meaning they will quickly become impractical for large scale annotation efforts. Further development of interpretability efforts must address the computational complexity challenge to enable widespread adoption.
 
+## Data and Code Availability
+
+All source code is publicly available at: https://github.com/ek775/Hidden-State-Genomics.
+
+## Acknowledgements and Conflicts of Interest
+
+**Funding.**
+
 <!-- markdownlint-disable MD033 -->
 ## References
 
@@ -271,8 +279,6 @@ For mechanistic interpretability in particular, the extraction of SAE latents ha
 
 ## Supplementary Materials
 
-Code is publicly available at: https://github.com/ek775/Hidden-State-Genomics
-
 ### Supplementary Methods S1: Notation
 
 Let a sequence produce token-level hidden states $h_i \in \mathbb{R}^d$ for positions $i=1,\dots,n$. Let $m$ denote the SAE expansion factor and $D = m d$ denote the latent dictionary size. Let $z_i \in \mathbb{R}^D$ be the sparse latent activation at position $i$.
@@ -291,7 +297,7 @@ $$
 \lambda_t = \lambda_{\max} \min\left(1, \frac{t}{T_{\text{anneal}}}\right),
 $$
 
-where $t$ is the training step and $T_{\text{anneal}}$ is the annealing horizon. Hidden-state sequences are shuffled, partitioned with a 10% validation holdout, and processed in shards to control memory footprint. Model selection uses validation tracking with early stopping.
+where $t$ is the training step and $T_{\text{anneal}}$ is the annealing horizon. Hidden-state sequences are shuffled, partitioned with a 20% validation holdout, and processed in shards to control memory footprint. Model selection uses validation tracking with early stopping.
 
 ### Supplementary Methods S3: Knowledge Graph Construction
 
@@ -311,11 +317,11 @@ A directed edge $(t_i, f_i^*)$ is added from token $t_i$ to feature $f_i^*$. The
 
 ### Supplementary Methods S4: Feature Intervention Operator
 
-For latent matrix $Z \in \mathbb{R}^{n \times D}$, target feature index $f$, minimum activation $\tau \ge 0$, and intervention scale $\alpha \ge 0$:
+For latent matrix $Z \in \mathbb{R}^{n \times D}$, target feature index $f$, minimum activation $\delta \ge 0$, and intervention scale $\alpha \ge 0$:
 
 1. Threshold clamp on target feature:
 
-$$Z_{:,f} \leftarrow \max(Z_{:,f}, \tau).$$
+$$Z_{:,f} \leftarrow \max(Z_{:,f}, \delta).$$
 
 2. Construct multiplicative intervention mask $V$:
 
