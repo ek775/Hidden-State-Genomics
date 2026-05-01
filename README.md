@@ -113,6 +113,7 @@ python -m hsg.featureanalysis.featureKG \
    --input data/cisplatin_pos.fa \
    --output data/cisplatin_pos_kg.json \
    --exp_factor 8 \
+   --sae_dir "./checkpoints/hidden-state-genomics/ef8/sae" \
    --layer_idx 23
 ```
 
