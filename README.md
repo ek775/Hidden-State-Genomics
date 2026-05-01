@@ -138,6 +138,7 @@ python -m hsg.cisplatinRNA.CNNtrain \
    --cisplatin_negative data/A2780_Cisplatin_Binding/cisplatin_neg_45k.bed \
    --layer_idx 23 \
    --exp_factor 8 \
+   --sae_dir checkpoints/hidden-state-genomics/ef8/sae/layer_23.pt \
    --condition all
 ```
 
