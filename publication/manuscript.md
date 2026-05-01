@@ -297,7 +297,7 @@ $$
 \lambda_t = \lambda_{\max} \min\left(1, \frac{t}{T_{\text{anneal}}}\right),
 $$
 
-where $t$ is the training step and $T_{\text{anneal}}$ is the annealing horizon. Hidden-state sequences are shuffled, partitioned with a 20% validation holdout, and processed in shards to control memory footprint. Model selection uses validation tracking with early stopping.
+where $t$ is the training step and $T_{\text{anneal}}$ is the annealing horizon. Hidden-state sequences are shuffled, partitioned with a 10% validation holdout, and processed in shards to control memory footprint. Model selection uses validation tracking with early stopping.
 
 ### Supplementary Methods S3: Knowledge Graph Construction
 
