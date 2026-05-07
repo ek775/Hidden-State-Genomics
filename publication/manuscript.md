@@ -1,7 +1,7 @@
 ---
 title: "Hidden State Genomics: *Graph-Based Analysis of Sparse Auto-Encoder Feature Activity in Genomic Language Models*"
 author: Eliot Kmiec, Samuel O'Brien, Matthew McCoy
-date: April 10th, 2026 
+date: May 7th, 2026 
 subtitle: Georgetown University
 geometry: margin=3cm
 output: pdf_document
@@ -246,11 +246,19 @@ For mechanistic interpretability in particular, the extraction of SAE latents ha
 
 ## Data and Code Availability
 
-All source code is publicly available at: https://github.com/ek775/Hidden-State-Genomics.
+All source code is publicly available at: https://github.com/ek775/Hidden-State-Genomics. Large data files and artifacts not pulled from public sources can be found on Zenodo at [10.5281/zenodo.20073353](https://doi.org/10.5281/zenodo.20073353).
 
 ## Acknowledgements and Conflicts of Interest
 
+We would like to thank Krishnaraj and colleagues for sharing their PlatRNA-seq data and mapped loci prior to publication and for granting permission to use their data in our work.
+
 **Funding.**
+
+Compute resources for this project were generously funded by a Google Academic Research Grant which provided cloud computing resources for training and inference of the models used in our research.
+
+**Conflicts of Interest.**
+
+The Authors have no conflicts of interest to declare.
 
 <!-- markdownlint-disable MD033 -->
 ## References
