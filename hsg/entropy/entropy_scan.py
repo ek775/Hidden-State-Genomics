@@ -77,27 +77,25 @@ def _sliding_window_entropy(
 
     Returns a list of length len(sequence)-k.  Positions < k have no context
     and are omitted.
+
+    Uses ``batch_next_token_probs`` to dispatch all context queries as a
+    single Rayon-parallel call into the Rust extension, avoiding per-position
+    Python↔Rust round-trips.
     """
     n = len(sequence)
-    entropies: list[float] = []
+    if n <= k:
+        return []
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn(f"[cyan]{desc}[/cyan] sliding k={k}"),
-        BarColumn(bar_width=30),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeElapsedColumn(),
-        console=console,
-        transient=True,
-    ) as progress:
-        task = progress.add_task("scan", total=n - k)
-        for i in range(k, n):
-            ctx = sequence[i - k : i]
-            probs = index.next_token_probs(ctx, [ctx + a for a in alphabet])
-            entropies.append(_entropy(probs))
-            progress.advance(task)
+    with console.status(f"[cyan]{desc}[/cyan] sliding k={k} — building {n - k:,} queries…"):
+        queries = [
+            (sequence[i - k : i], [sequence[i - k : i] + a for a in alphabet])
+            for i in range(k, n)
+        ]
 
-    return entropies
+    with console.status(f"[cyan]{desc}[/cyan] sliding k={k} — scoring {len(queries):,} positions…"):
+        all_probs = index.batch_next_token_probs(queries)
+
+    return [_entropy(p) for p in all_probs]
 
 
 def _context_length_entropy(
@@ -145,10 +143,14 @@ _BLOCKS = " ▁▂▃▄▅▆▇█"
 _SPARK_WIDTH = 80  # terminal columns for the sparkline
 
 
-def _sparkline(values: list[float], width: int = _SPARK_WIDTH) -> str:
-    """Downsample `values` to `width` characters and render as a block sparkline."""
+def _sparkline(values: list[float], width: int = _SPARK_WIDTH) -> tuple[str, list[float]]:
+    """Downsample `values` to `width` characters and render as a block sparkline.
+
+    Returns ``(sparkline_string, pooled_values)`` where ``pooled_values`` has
+    one averaged entry per rendered character (length == ``width``).
+    """
     if not values:
-        return ""
+        return "", []
     # Pool into `width` buckets by averaging
     n = len(values)
     pooled: list[float] = []
@@ -166,7 +168,7 @@ def _sparkline(values: list[float], width: int = _SPARK_WIDTH) -> str:
     for v in pooled:
         idx = int((v - vmin) / span * (len(_BLOCKS) - 1))
         chars.append(_BLOCKS[idx])
-    return "".join(chars)
+    return "".join(chars), pooled
 
 
 def _bar(value: float, vmax: float, width: int = 20) -> str:
@@ -183,6 +185,7 @@ def _print_sliding_results(
     entropies: list[float],
     k: int,
     region_label: str,
+    alphabet_size: int = 4,
 ) -> None:
     valid = [e for e in entropies if not math.isnan(e)]
     if not valid:
@@ -192,20 +195,37 @@ def _print_sliding_results(
     mean_h = sum(valid) / len(valid)
     min_h = min(valid)
     max_h = max(valid)
+    h_max = math.log2(alphabet_size) if alphabet_size > 1 else 1.0
+    mean_norm = mean_h / h_max
 
     console.print(Rule(f"[bold]{label}[/bold] — sliding window  k={k}"))
     console.print(f"Region : {region_label}")
     console.print(f"Bases  : {len(entropies)}  (context requires first {k} bases)")
     console.print(
-        f"Entropy: mean={mean_h:.3f} bits  min={min_h:.3f}  max={max_h:.3f}"
+        f"Entropy: mean={mean_h:.3f} bits  min={min_h:.3f}  max={max_h:.3f}  "
+        f"H_max={h_max:.3f}  H/H_max={mean_norm:.3f}"
     )
     console.print()
-    spark = _sparkline(entropies)
-    # Colour: low entropy = red (constrained), high = green (variable)
-    console.print(f"[dim]low[/dim]  [red]{spark[:len(spark)//3]}[/red]"
-                  f"[yellow]{spark[len(spark)//3:2*len(spark)//3]}[/yellow]"
-                  f"[green]{spark[2*len(spark)//3:]}[/green]  [dim]high[/dim]")
+    spark, pooled = _sparkline(entropies)
+    # Colour each character by its entropy value relative to the distribution.
+    # Red = low entropy (constrained), yellow = mid, green = high (variable).
+    if pooled:
+        sorted_vals = sorted(pooled)
+        lo_thresh = sorted_vals[len(sorted_vals) // 3]
+        hi_thresh = sorted_vals[2 * len(sorted_vals) // 3]
+        colored = ""
+        for ch, v in zip(spark, pooled):
+            if v <= lo_thresh:
+                colored += f"[red]{ch}[/red]"
+            elif v <= hi_thresh:
+                colored += f"[yellow]{ch}[/yellow]"
+            else:
+                colored += f"[green]{ch}[/green]"
+    else:
+        colored = spark
+    console.print(f"[dim]low ▁[/dim]  {colored}  [dim]█ high[/dim]")
     console.print(f"       [dim]{'◄ 5′':^{_SPARK_WIDTH // 2}}{'3′ ►':^{_SPARK_WIDTH // 2}}[/dim]")
+    console.print(f"       [dim]([red]█[/red]=low H  [yellow]█[/yellow]=mid  [green]█[/green]=high H, relative to this scan)[/dim]")
     console.print()
 
 
@@ -239,11 +259,25 @@ def _print_context_results(
         table.add_row(str(k), *cells, f"{bar} {mean_v:.3f}")
 
     console.print(table)
+
+    # Warn when entropy collapses to zero — this is almost always data
+    # sparsity (the k-mer context appears ≤1 time in the corpus), NOT
+    # genuine biological or linguistic determinism.
+    first_sparse_k = next(
+        (k for k, mean_v in zip(ks, all_means) if mean_v < 1e-6 and k > 1),
+        None,
+    )
+    if first_sparse_k is not None:
+        console.print(
+            f"[yellow]⚠  H=0 from k={first_sparse_k} onward is likely data sparsity[/yellow] "
+            "(each k-mer context appears ≤1 time in the corpus), "
+            "not deterministic biological or linguistic constraint."
+        )
     console.print()
 
 
 # All standard GRCh38 chromosomes (index default when --idx-chroms not set).
-_ALL_CHROMS: list = (
+_ALL_CHROMS: list[str] = (
     [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"]
 )
 
@@ -284,16 +318,19 @@ def run_genomic(
         border_style="green",
     ))
 
+    # --- Open SeqRepo once; reuse for both index building and window fetch ---
+    with console.status("[green]Opening SeqRepo…[/green]"):
+        from biocommons.seqrepo import SeqRepo
+        sr = SeqRepo(os.environ["SEQREPO_PATH"])
+
     # --- Build index over all requested chromosomes ---
     with console.status(f"[green]Building FM-index over {', '.join(idx_chroms)} …[/green]"):
-        index = build_genome_index(idx_chroms)
+        index = build_genome_index(idx_chroms, sr=sr)
 
     console.print(f"[green]✓[/green] Index built — {index}\n")
 
     # --- Fetch the analysis window from the anchor chromosome ---
     with console.status("[green]Fetching analysis window from SeqRepo…[/green]"):
-        from biocommons.seqrepo import SeqRepo
-        sr = SeqRepo(os.environ["SEQREPO_PATH"])
         sequence = str(sr[f"GRCh38:{anchor_chrom}"][region_start:region_end]).upper()
 
     console.print(f"[green]✓[/green] Sequence fetched: {len(sequence):,} bp\n")
@@ -302,7 +339,7 @@ def run_genomic(
     entropies = _sliding_window_entropy(
         index, sequence, k, DNA_ALPHABET, desc="genomic"
     )
-    _print_sliding_results("Genomic", entropies, k, region_label)
+    _print_sliding_results("Genomic", entropies, k, region_label, alphabet_size=len(DNA_ALPHABET))
 
     # --- Context-length sweep ---
     step = max(1, len(sequence) // (n_ctx_positions + 1))
@@ -349,9 +386,13 @@ def run_nltk(
     full_text = _nltk_corpus_text(corpus_name, fileid)
 
     # Use only the first `window_chars` characters (analogous to a genomic window).
-    text = full_text[:window_chars].upper()
+    # Strip \r before uppercasing: Gutenberg files use \r\n line endings, so \r
+    # is always deterministically followed by \n — leaving it in would make every
+    # \r position show H=0, contaminating the entropy comparison.
+    # Upper-casing collapses case (reduces unique characters, lowers entropy baseline).
+    text = full_text[:window_chars].replace("\r", "").upper()
     # Derive alphabet from the window (printable chars only).
-    alphabet = tuple(sorted(set(text) - {"\n", "\r", "\t"}))
+    alphabet = tuple(sorted(set(text) - {"\n", "\t"}))
 
     console.print(f"[blue]✓[/blue] Corpus loaded — {len(text):,} chars  |  "
                   f"alphabet size: {len(alphabet)}\n")
@@ -366,7 +407,7 @@ def run_nltk(
     entropies = _sliding_window_entropy(
         index, text, k, alphabet, desc="english"
     )
-    _print_sliding_results("English", entropies, k, f"{corpus_name}/{fileid}[:{window_chars}]")
+    _print_sliding_results("English", entropies, k, f"{corpus_name}/{fileid}[:{window_chars}]", alphabet_size=len(alphabet))
 
     # --- Context-length sweep ---
     step = max(1, len(text) // (n_ctx_positions + 1))
@@ -439,10 +480,16 @@ def main() -> None:
     # --- Resolve idx-chroms ---
     idx_chroms = args.idx_chroms if args.idx_chroms else _ALL_CHROMS
 
+    # --- Validate scan parameters ---
+    if args.k < 1:
+        _build_parser().error("--k must be ≥ 1")
+    if args.max_k < args.k:
+        _build_parser().error("--max-k must be ≥ --k")
+
     # --- Resolve anchor ---
     if args.anchor:
         try:
-            chrom_part, coords = args.anchor.split(":")
+            chrom_part, coords = args.anchor.split(":", 1)
             a_start, a_end = (int(x) for x in coords.split("-"))
         except ValueError:
             _build_parser().error(

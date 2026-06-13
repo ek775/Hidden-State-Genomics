@@ -22,15 +22,17 @@
 //! Load chromosomes in batches if whole-genome indexing is not feasible.
 //!
 //! # SA construction
-//! Currently O(n log n) average via Rust's pdqsort.  For sequences > ~50 MB,
-//! replace `build_suffix_array` with an SA-IS / libdivsufsort binding.
+//! Currently O(n log n) comparisons via Rust's pdqsort; each suffix comparison
+//! is O(n) in the worst case (highly repetitive text), giving O(n² log n) overall.
+//! For sequences > ~50 MB, replace `build_suffix_array` with an SA-IS / libdivsufsort
+//! binding to guarantee O(n) construction.
 
 use pyo3::prelude::*;
 use rayon::prelude::*;
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
-// Suffix array (pdqsort, O(n log n) average)
+// Suffix array (pdqsort — O(n log n) comparisons, O(n) per comparison worst case)
 // ---------------------------------------------------------------------------
 
 fn build_suffix_array(text: &[u8]) -> Vec<usize> {
@@ -80,6 +82,13 @@ impl FmIndex {
         let alphabet: Vec<u8> = (0u8..=255).filter(|&b| seen[b as usize]).collect();
         let sigma = alphabet.len();
 
+        // Guard: u8::MAX is the "not found" sentinel; it must not be a valid index.
+        assert!(
+            sigma < 255,
+            "alphabet has {} distinct bytes; u8::MAX sentinel would collide with index {}",
+            sigma,
+            sigma - 1
+        );
         let mut char_to_idx = [u8::MAX; 256];
         for (i, &ch) in alphabet.iter().enumerate() {
             char_to_idx[ch as usize] = i as u8;
@@ -227,14 +236,13 @@ impl BwtIndex {
         &self,
         queries: Vec<(String, Vec<String>)>,
     ) -> Vec<HashMap<String, f64>> {
-        // FmIndex is read-only after construction (pure data, no interior
-        // mutability), so sharing a raw pointer across rayon threads is safe.
-        let inner_ptr = &self.inner as *const FmIndex as usize;
+        // FmIndex is read-only after construction and all its fields implement
+        // Sync, so a shared reference is safe across Rayon threads without any
+        // unsafe code.
+        let inner = &self.inner;
         queries
             .into_par_iter()
             .map(|(k, exts)| {
-                // SAFETY: pointer valid for duration of this call; no writes.
-                let inner: &FmIndex = unsafe { &*(inner_ptr as *const FmIndex) };
                 let freq_k = inner.count(k.as_bytes());
                 exts.into_iter()
                     .map(|ext| {

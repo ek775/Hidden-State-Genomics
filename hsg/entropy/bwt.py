@@ -84,6 +84,7 @@ def build_genome_index(
     chroms: list[str],
     seqrepo_path: str | None = None,
     strand: str = "+",
+    sr=None,
 ) -> BwtIndex:
     """Build a ``BwtIndex`` over one or more GRCh38 chromosomes.
 
@@ -97,9 +98,13 @@ def build_genome_index(
         UCSC-style chromosome names, e.g. ``["chr1", "chr2"]``.
     seqrepo_path:
         Path to the SeqRepo root directory.  Defaults to the ``SEQREPO_PATH``
-        environment variable.
+        environment variable.  Ignored when ``sr`` is provided.
     strand:
         ``"+"`` (default) or ``"-"`` — applied to all chromosomes.
+    sr:
+        An already-open ``biocommons.seqrepo.SeqRepo`` instance.  When
+        supplied, ``seqrepo_path`` is ignored and no second database
+        connection is opened.
 
     Returns
     -------
@@ -107,8 +112,14 @@ def build_genome_index(
     """
     from biocommons.seqrepo import SeqRepo
 
-    path = seqrepo_path or os.environ["SEQREPO_PATH"]
-    sr = SeqRepo(path)
+    if sr is None:
+        path = seqrepo_path or os.environ.get("SEQREPO_PATH")
+        if not path:
+            raise RuntimeError(
+                "A SeqRepo path is required: pass seqrepo_path=, set the "
+                "SEQREPO_PATH environment variable, or pass an open sr= instance."
+            )
+        sr = SeqRepo(path)
     sequences = [_load_chromosome(sr, c, strand) for c in chroms]
     return BwtIndex.from_sequences(sequences)
 
@@ -169,6 +180,12 @@ def score_kmer_context(
     k_plus_1: str,
 ) -> tuple[int, int, float]:
     """Return ``(count(k), count(k_plus_1), P(k_plus_1 | k))`` for a string body.
+
+    .. warning::
+        This function builds a new ``BwtIndex`` on every call.  For repeated
+        queries over the same corpus, build the index once with
+        ``build_corpus_index`` or ``build_genome_index`` and call
+        ``index.next_token_prob`` directly.
 
     Parameters
     ----------
