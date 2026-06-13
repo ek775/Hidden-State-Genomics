@@ -1,0 +1,16 @@
+[package]
+name = "bwt"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "bwt"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py312"] }
+rayon = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1

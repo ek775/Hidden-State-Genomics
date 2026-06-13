@@ -40,6 +40,7 @@ dependencies = [
     "holoviews",
     "gffutils",
     "fastapi",
+    "nltk",
 ]
 
 [build-system]
