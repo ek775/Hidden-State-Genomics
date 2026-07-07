@@ -1,0 +1,16 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "bwt"
+version = "0.1.0"
+description = "BWT/FM-index frequency counting for genomic and natural language sequences"
+requires-python = ">=3.12"
+
+[tool.maturin]
+module-name = "bwt"
+features = ["pyo3/extension-module"]
+# Stable ABI: wheel runs on CPython 3.12+ including 3.14.
+bindings = "pyo3"
+python-requires = ">=3.12"

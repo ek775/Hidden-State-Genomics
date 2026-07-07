@@ -142,6 +142,63 @@ python -m hsg.cisplatinRNA.CNNtrain \
    --condition all
 ```
 
+### 5) BWT Entropy Scan (`hsg/entropy/`)
+
+Computes per-base Shannon entropy of next-nucleotide probabilities using an
+FM-index built over GRCh38 sequence data, with a parallel NLTK English-corpus
+comparison.
+
+#### Prerequisites
+
+Build the Rust extension once (requires Rust + maturin):
+
+```bash
+cargo install maturin          # or: pip install maturin
+cd bwt && maturin develop --release
+cd ..
+```
+
+> **Memory requirements.**  The FM-index Occ table is dense: ~4 bytes × σ × n,
+> where σ is the alphabet size and n is the total indexed length.
+>
+> | Scope | Approx. RAM |
+> |---|---|
+> | Single chromosome (e.g. chr12, ~133 Mb) | ~2–3 GB |
+> | All autosomes + sex chromosomes (~3 Gb) | ~48 GB |
+>
+> Whole-genome indexing requires a workstation or cloud instance with ≥64 GB RAM.
+> On a laptop, restrict `--idx-chroms` to one or a few chromosomes.
+
+#### Recommended laptop configuration
+
+```bash
+# Index only chr12, scan the default locus ± 6 kb
+python -m hsg.entropy.entropy_scan \
+    --idx-chroms chr12 \
+    --anchor chr12:65824760-65824860 \
+    --flank 6000 \
+    --k 6 --max-k 12
+
+# Skip the genomic scan entirely; run only the NLTK comparison
+python -m hsg.entropy.entropy_scan \
+    --skip-genomic \
+    --nltk-window 50000 \
+    --k 4 --max-k 8
+```
+
+#### Recommended server / cloud configuration
+
+```bash
+# Full genome index, default anchor, release k parameters
+python -m hsg.entropy.entropy_scan \
+    --k 6 --max-k 16
+```
+
+`--idx-chroms` defaults to all human chromosomes (chr1–22, chrX, chrY) when
+omitted.  The `--anchor` locus (default `chr12:65824760-65824860`) controls
+which ± `--flank` base window is actually scanned; it does not need to match
+the indexed chromosomes.
+
 ## Reproducibility Notes
 
 - SAE checkpoints are organized by expansion factor and layer in `checkpoints/`.
